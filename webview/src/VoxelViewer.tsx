@@ -16,7 +16,7 @@ export const VoxelViewer: React.FC = () => {
 
 	if (!voxelData) {
 		return (
-			<div className="loading">
+			<div className="loading" style={{ display: 'flex', flexDirection: 'column' }}>
 				<div>No voxel data loaded.</div>
 				<div style={{ fontSize: '12px', marginTop: '10px', color: 'var(--vscode-descriptionForeground)' }}>
 					Open a .leS file to view voxels

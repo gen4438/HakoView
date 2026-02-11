@@ -193,7 +193,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         if (uEnableEdgeHighlight > 0.5) {
             float distanceFromCamera = length(vOrigin - realPosition);
             if (distanceFromCamera < uEdgeFadeEnd) {
-                vec3 fractPos = fract(realPosition);
+                // オブジェクト空間に変換してhalfOddを適用
+                vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
+                vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
+                vec3 adjustedPos = objPos + halfOdd;
+                vec3 fractPos = fract(adjustedPos);
                 vec3 distToEdge = min(fractPos, 1.0 - fractPos);
                 bool isEdge = false;
                 if (abs(n.x) > 0.5) {
@@ -286,7 +290,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             if (uEnableEdgeHighlight > 0.5) {
                 float distanceFromCamera = length(vOrigin - realPosition);
                 if (distanceFromCamera < uEdgeFadeEnd) {
-                    vec3 fractPos2 = fract(realPosition);
+                    // オブジェクト空間に変換してhalfOddを適用
+                    vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
+                    vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
+                    vec3 adjustedPos = objPos + halfOdd;
+                    vec3 fractPos2 = fract(adjustedPos);
                     vec3 distToEdge = min(fractPos2, 1.0 - fractPos2);
                     bool isEdge = false;
                     if (abs(n.x) > 0.5) {
@@ -325,8 +333,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     if (uEnableEdgeHighlight > 0.5) {
         float distanceFromCamera = length(vOrigin - realPosition);
         if (distanceFromCamera < uEdgeFadeEnd) {
-            // ボクセル内の相対位置（[0,1)）
-            vec3 fractPos3 = fract(realPosition);
+            // オブジェクト空間に変換してhalfOddを適用
+            vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
+            vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
+            vec3 adjustedPos = objPos + halfOdd;
+            vec3 fractPos3 = fract(adjustedPos);
             vec3 distToEdge = min(fractPos3, 1.0 - fractPos3);
 
             // 面法線の軸を特定
