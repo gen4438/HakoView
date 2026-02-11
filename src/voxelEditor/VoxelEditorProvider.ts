@@ -4,6 +4,7 @@ import { getWebviewHtml } from './getWebviewHtml';
 import { sendVoxelData, sendError, WebviewToExtensionMessage } from './messaging';
 import { LesParser } from '../voxelParser/LesParser';
 import { ParseError } from '../voxelParser/validation';
+import { registerViewerPanel } from './panelRegistry';
 
 /**
  * CustomEditorProvider for .leS voxel files
@@ -91,6 +92,9 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
         extensionUri: this.context.extensionUri,
       });
       console.log('Webview HTML generated');
+
+      // パネルをレジストリに登録
+      registerViewerPanel(webviewPanel);
 
       // メッセージハンドリング設定
       this.setupMessageHandling(document, webviewPanel);
@@ -193,6 +197,36 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             const data = new Uint8Array(message.data);
             const dataset = LesParser.parse(data, message.fileName);
             sendVoxelData(webviewPanel.webview, dataset, true);
+            webviewPanel.title = message.fileName;
+          } catch (error) {
+            const errorMessage =
+              error instanceof ParseError
+                ? `Failed to parse voxel file: ${error.message}`
+                : `Failed to load voxel file: ${error instanceof Error ? error.message : String(error)}`;
+            sendError(webviewPanel.webview, errorMessage);
+            vscode.window.showErrorMessage(errorMessage);
+          }
+          break;
+
+        case 'loadFileFromPath':
+          try {
+            // URIをパース（file:// または vscode-resource:// など）
+            let uri: vscode.Uri;
+            try {
+              uri = vscode.Uri.parse(message.filePath);
+            } catch {
+              // パースに失敗した場合はファイルパスとして扱う
+              uri = vscode.Uri.file(message.filePath);
+            }
+
+            // ファイルを読み込み
+            const fileData = await vscode.workspace.fs.readFile(uri);
+            const fileName = uri.path.split('/').pop() || 'unknown.leS';
+
+            // パース
+            const dataset = LesParser.parse(fileData, fileName);
+            sendVoxelData(webviewPanel.webview, dataset, true);
+            webviewPanel.title = fileName;
           } catch (error) {
             const errorMessage =
               error instanceof ParseError

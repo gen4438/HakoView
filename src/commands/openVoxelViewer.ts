@@ -9,6 +9,7 @@ import {
   WebviewToExtensionMessage,
 } from '../voxelEditor/messaging';
 import { ParseError } from '../voxelParser/validation';
+import { registerViewerPanel } from '../voxelEditor/panelRegistry';
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof ParseError) {
@@ -42,6 +43,9 @@ export function registerOpenVoxelViewerCommand(
       extensionUri: context.extensionUri,
     });
 
+    // パネルをレジストリに登録（D&Dリダイレクト用）
+    registerViewerPanel(panel);
+
     let currentDataset: VoxelDataset | null = null;
     let currentError: string | null = null;
 
@@ -63,6 +67,29 @@ export function registerOpenVoxelViewerCommand(
             currentDataset = LesParser.parse(data, message.fileName);
             currentError = null;
             sendVoxelData(panel.webview, currentDataset, true);
+            panel.title = message.fileName;
+          } catch (error) {
+            const errorMessage = getErrorMessage(error);
+            currentError = errorMessage;
+            sendError(panel.webview, errorMessage);
+            vscode.window.showErrorMessage(errorMessage);
+          }
+          break;
+
+        case 'loadFileFromPath':
+          try {
+            let uri: vscode.Uri;
+            try {
+              uri = vscode.Uri.parse(message.filePath);
+            } catch {
+              uri = vscode.Uri.file(message.filePath);
+            }
+            const fileData = await vscode.workspace.fs.readFile(uri);
+            const fileName = uri.path.split('/').pop() || 'unknown.leS';
+            currentDataset = LesParser.parse(fileData, fileName);
+            currentError = null;
+            sendVoxelData(panel.webview, currentDataset, true);
+            panel.title = fileName;
           } catch (error) {
             const errorMessage = getErrorMessage(error);
             currentError = errorMessage;

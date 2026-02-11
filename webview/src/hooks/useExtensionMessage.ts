@@ -119,6 +119,16 @@ export function useExtensionMessage() {
   };
 
   /**
+   * ファイルパスからロード（ワークスペース内のファイルD&D用）
+   */
+  const loadFileFromPath = (filePath: string) => {
+    postMessage({
+      command: 'loadFileFromPath',
+      filePath,
+    });
+  };
+
+  /**
    * 状態を保存
    */
   const saveState = (state: ViewerState) => {
@@ -152,6 +162,7 @@ export function useExtensionMessage() {
     error,
     isLoading,
     loadFile,
+    loadFileFromPath,
     saveState,
     openAsText,
     reportError,

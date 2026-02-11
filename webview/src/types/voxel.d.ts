@@ -101,6 +101,7 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { command: 'ready' }
   | { command: 'loadFile'; fileName: string; data: number[] }
+  | { command: 'loadFileFromPath'; filePath: string }
   | { command: 'saveState'; state: ViewerState }
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
