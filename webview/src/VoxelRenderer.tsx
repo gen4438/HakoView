@@ -327,12 +327,12 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
     edgeIntensity: 0.8,
     edgeMaxDistance: 200,
     clippingMode: 'Off',
-    sliceAxis: 'Y',
+    sliceAxis: 'Z',
     slicePosition: 0,
     sliceReverse: false,
     customNormalX: 0,
-    customNormalY: 1,
-    customNormalZ: 0,
+    customNormalY: 0,
+    customNormalZ: 1,
     customDistance: 0,
     usePerspective: true,
   });
@@ -567,7 +567,7 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
   // クリッピングプレーン計算
   const calculateClippingPlane = () => {
     if (clippingMode === 'Off') {
-      return { normal: new THREE.Vector3(0, 1, 0), distance: 0, enabled: false };
+      return { normal: new THREE.Vector3(0, 0, 1), distance: 0, enabled: false };
     }
 
     if (clippingMode === 'Slice') {
@@ -596,6 +596,19 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 
   const clippingPlane = calculateClippingPlane();
   const effectiveDpr = Math.min(Math.max(dpr, 0.5), maxDpr);
+
+  // モデル全体が画面に収まるカメラ初期位置を計算
+  const cameraPosition = useMemo((): [number, number, number] => {
+    const { x, y, z } = voxelData.dimensions;
+    // バウンディングスフィアの半径
+    const radius = Math.sqrt(x * x + y * y + z * z) / 2;
+    // デフォルトFOVでちょうど収まる距離（少し余白を追加）
+    const defaultFovRad = (defaultValues.current.fov * Math.PI) / 180;
+    const distance = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
+    // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
+    const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
+    return [dir.x * distance, dir.y * distance, dir.z * distance];
+  }, [voxelData.dimensions]);
 
   // デバッグ: コントロール値確認
   useEffect(() => {
@@ -673,22 +686,16 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
         {usePerspective ? (
           <PerspectiveCamera
             makeDefault
-            position={[
-              voxelData.dimensions.x * 1.5,
-              voxelData.dimensions.y * 1.5,
-              voxelData.dimensions.z * 1.5,
-            ]}
+            position={cameraPosition}
+            up={[0, 0, 1]}
             fov={fov}
             far={far}
           />
         ) : (
           <OrthographicCamera
             makeDefault
-            position={[
-              voxelData.dimensions.x * 1.5,
-              voxelData.dimensions.y * 1.5,
-              voxelData.dimensions.z * 1.5,
-            ]}
+            position={cameraPosition}
+            up={[0, 0, 1]}
             zoom={2}
             near={0.1}
             far={far}
@@ -707,7 +714,7 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
         />
 
         <ambientLight intensity={ambientIntensity} />
-        <directionalLight position={[10, 10, 5]} intensity={lightIntensity} />
+        <directionalLight position={[10, 5, 10]} intensity={lightIntensity} />
 
         <VoxelMesh
           voxelData={voxelData}
@@ -730,7 +737,11 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
           customColors={customColors}
         />
 
-        <gridHelper args={[100, 10]} position={[0, -voxelData.dimensions.y / 2 - 5, 0]} />
+        <gridHelper
+          args={[100, 10]}
+          position={[0, 0, -voxelData.dimensions.z / 2 - 5]}
+          rotation={[Math.PI / 2, 0, 0]}
+        />
 
         <Stats />
         <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
