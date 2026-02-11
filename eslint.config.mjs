@@ -1,6 +1,8 @@
 import typescriptEslint from "typescript-eslint";
 
 export default [{
+    ignores: ["dist/", "out/", "node_modules/", "webview/dist/", "*.config.js", "*.config.mjs", "esbuild.js", "esbuild.webview.js"]
+}, {
     files: ["**/*.ts"],
 }, {
     plugins: {

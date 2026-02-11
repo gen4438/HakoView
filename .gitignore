@@ -1,5 +1,37 @@
+# Build outputs
 out
 dist
 node_modules
-.vscode-test/
 *.vsix
+
+# Testing
+.vscode-test/
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env*
+
+# IDEs
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Webview
+webview/dist/
+webview/node_modules/
+
+# Misc
+*.prof*
+*.js.map
