@@ -56,21 +56,26 @@ function VoxelMesh({ voxelData }: { voxelData: VoxelDataMessage }) {
 		return texture;
 	}, [voxelData]);
 
-	// パレットテクスチャ作成
+	// パレットテクスチャ作成（RGBA形式、参照実装に準拠）
 	const paletteTexture = useMemo(() => {
 		const paletteSize = 16;
-		const data = new Uint8Array(paletteSize * 3);
+		const data = new Uint8Array(paletteSize * 4);
 
 		defaultPalette.forEach((colorStr, i) => {
 			const color = new THREE.Color(colorStr);
-			data[i * 3 + 0] = Math.floor(color.r * 255);
-			data[i * 3 + 1] = Math.floor(color.g * 255);
-			data[i * 3 + 2] = Math.floor(color.b * 255);
+			data[i * 4 + 0] = Math.floor(color.r * 255);
+			data[i * 4 + 1] = Math.floor(color.g * 255);
+			data[i * 4 + 2] = Math.floor(color.b * 255);
+			data[i * 4 + 3] = i === 0 ? 0 : 255; // index 0 (空) は透明
 		});
 
-		const texture = new THREE.DataTexture(data, paletteSize, 1);
-		texture.format = THREE.RGBFormat;
-		texture.type = THREE.UnsignedByteType;
+		const texture = new THREE.DataTexture(
+			data,
+			paletteSize,
+			1,
+			THREE.RGBAFormat,
+			THREE.UnsignedByteType
+		);
 		texture.minFilter = THREE.NearestFilter;
 		texture.magFilter = THREE.NearestFilter;
 		texture.needsUpdate = true;
@@ -106,7 +111,7 @@ function VoxelMesh({ voxelData }: { voxelData: VoxelDataMessage }) {
 		uEdgeFadeEnd: { value: 200 },
 		uModelMatrixInverse: { value: new THREE.Matrix4() },
 		uValueVisibility: { value: new Array(16).fill(1.0) },
-		uShowZeroValues: { value: 1.0 }
+		uShowZeroValues: { value: 0.0 }
 	}), [voxelData, dataTexture, paletteTexture]);
 
 	// フレームごとにユニフォームを更新
@@ -121,22 +126,20 @@ function VoxelMesh({ voxelData }: { voxelData: VoxelDataMessage }) {
 		}
 	});
 
-	// ボックスジオメトリ（ボクセルグリッドのバウンディングボックス）
-	const size = Math.max(
-		voxelData.dimensions.x,
-		voxelData.dimensions.y,
-		voxelData.dimensions.z
-	);
-
 	return (
 		<mesh ref={meshRef}>
-			<boxGeometry args={[size, size, size]} />
+			<boxGeometry args={[
+				voxelData.dimensions.x,
+				voxelData.dimensions.y,
+				voxelData.dimensions.z,
+				1, 1, 1
+			]} />
 			<shaderMaterial
 				vertexShader={vertexShader}
 				fragmentShader={fragmentShader}
 				uniforms={uniforms}
 				transparent
-				side={THREE.BackSide}
+				side={THREE.DoubleSide}
 				depthTest={true}
 				depthWrite={true}
 			/>

@@ -132,6 +132,10 @@ export class LesParser {
 			// 行の値数検証
 			validateRowLength(rowIndex, rowValues.length, z);
 
+			// Row i corresponds to (x, y) = (i÷Y, i%Y)
+			const xCoord = Math.floor(rowIndex / y);
+			const yCoord = rowIndex % y;
+
 			// 各値をパース
 			for (let colIndex = 0; colIndex < z; colIndex++) {
 				const valueStr = rowValues[colIndex];
@@ -141,9 +145,10 @@ export class LesParser {
 				validateVoxelValue(value, rowIndex, colIndex);
 
 				// 1次元配列に格納
-				// Row i corresponds to (x, y) = (i÷Y, i%Y)
-				// Index in 1D array: (x * Y + y) * Z + z
-				values[rowIndex * z + colIndex] = value;
+				// Three.js Data3DTexture expects: index = x + X * (y + Y * z)
+				const zCoord = colIndex;
+				const index = xCoord + x * (yCoord + y * zCoord);
+				values[index] = value;
 			}
 		}
 
@@ -161,11 +166,19 @@ export class LesParser {
 		const header = `${x} ${y} ${z} ${voxelLength.toExponential(6)}`;
 
 		// データ行
+		// leS format: X*Y rows, each with Z values
+		// Row i corresponds to (xCoord, yCoord) = (i÷Y, i%Y)
 		const dataLines: string[] = [];
 		for (let rowIndex = 0; rowIndex < x * y; rowIndex++) {
-			const rowStart = rowIndex * z;
-			const rowEnd = rowStart + z;
-			const rowValues = Array.from(values.slice(rowStart, rowEnd));
+			const xCoord = Math.floor(rowIndex / y);
+			const yCoord = rowIndex % y;
+
+			const rowValues: number[] = [];
+			for (let zCoord = 0; zCoord < z; zCoord++) {
+				// Read from 1D array using Three.js layout: index = x + X * (y + Y * z)
+				const index = xCoord + x * (yCoord + y * zCoord);
+				rowValues.push(values[index]);
+			}
 			dataLines.push(rowValues.join(' '));
 		}
 

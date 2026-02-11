@@ -29,6 +29,7 @@ export interface VoxelDataset {
 
 /**
  * 3次元座標を1次元配列のインデックスに変換
+ * Three.js Data3DTexture expects: index = x + X * (y + Y * z)
  * @param x X座標 (0 ≤ x < dimensions.x)
  * @param y Y座標 (0 ≤ y < dimensions.y)
  * @param z Z座標 (0 ≤ z < dimensions.z)
@@ -36,7 +37,7 @@ export interface VoxelDataset {
  * @returns 1次元配列のインデックス
  */
 export function getVoxelIndex(x: number, y: number, z: number, dimensions: Dimensions): number {
-	return (x * dimensions.y + y) * dimensions.z + z;
+	return x + dimensions.x * (y + dimensions.y * z);
 }
 
 /**

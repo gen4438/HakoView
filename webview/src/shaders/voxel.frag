@@ -133,11 +133,14 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     // 内部スタートか？
     bool insideStart = (tEnter < 0.0);
 
-    // DDA開始位置を計算（元の方式）
+    // DDA開始位置を計算
     vec3 p = origin + t * direction;
-    vec3 position = floor(p);
-    // ボクセルのサイズが奇数のときは 0.5 ずらす（元の方式）
-    position += 0.5 * mod(uVoxelShape, 2.0);
+    // 奇数サイズの軸はセル境界が半整数(±0.5, ±1.5, …)にあるため
+    // floor に渡す前に halfOdd を加算→減算でグリッドに位置合わせする。
+    // 偶数サイズの軸は halfOdd=0 なので影響なし。
+    vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
+    // レイ進行方向に微小オフセットを加え、セル境界上の曖昧さを解消
+    vec3 position = floor(p + halfOdd + sgn * 1e-4) - halfOdd;
 
     // DDA 初期化（境界面基準・ゼロ方向は+1側）
     vec3 stepVec      = sgn;
