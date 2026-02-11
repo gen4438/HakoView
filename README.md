@@ -1,69 +1,69 @@
 # hakoview README
 
-This is the README for your extension "hakoview". After writing up a brief description, we recommend including the following sections.
+このドキュメントは拡張機能「hakoview」のREADMEです。概要の記載後、以下の章を埋めてください。
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+拡張機能の具体的な機能を説明し、動作中のスクリーンショットを添えてください。画像パスはこのREADMEからの相対パスです。
 
-For example if there is an image subfolder under your extension project workspace:
+例: 拡張機能のワークスペースに画像フォルダがある場合:
 
 \!\[feature X\]\(images/feature-x.png\)
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+> ヒント: 多くの人気拡張機能はアニメーションを活用しています。短く要点を絞ったアニメーションは機能の魅力を伝えやすくおすすめです。
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+必要な依存関係や前提条件がある場合は、インストール方法や設定手順を記載してください。
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+`contributes.configuration` を通じてVS Code設定を追加する場合はここに記載します。
 
-For example:
+例:
 
-This extension contributes the following settings:
+この拡張機能は次の設定を追加します:
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+* `myExtension.enable`: 拡張機能の有効/無効を切り替えます。
+* `myExtension.thing`: `blah` に設定すると特定の動作を行います。
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+既知の不具合を記載すると、重複したIssueの作成を減らせます。
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+更新時にはリリースノートを用意してください。
 
 ### 1.0.0
 
-Initial release of ...
+初回リリース。
 
 ### 1.0.1
 
-Fixed issue #.
+Issue # の修正。
 
 ### 1.1.0
 
-Added features X, Y, and Z.
+機能X、Y、Zを追加。
 
 ---
 
-## Following extension guidelines
+## 拡張機能ガイドラインの遵守
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+拡張機能ガイドラインを確認し、推奨ベストプラクティスに従ってください。
 
 * [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
 
-## Working with Markdown
+## Markdownの利用
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+READMEはVS Codeで編集できます。便利なショートカット:
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+* エディタ分割（macOS: `Cmd+\` / Windows・Linux: `Ctrl+\`）
+* プレビュー切替（macOS: `Shift+Cmd+V` / Windows・Linux: `Shift+Ctrl+V`）
+* スニペット表示（Windows・Linux・macOS: `Ctrl+Space`）
 
-## For more information
+## 参考情報
 
 * [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
 * [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
