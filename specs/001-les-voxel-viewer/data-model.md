@@ -16,7 +16,7 @@
 
 | Property | Type | Description | Validation |
 |----------|------|-------------|------------|
-| `dimensions` | `{ x: number, y: number, z: number }` | ボクセル配列のサイズ | 各次元 1 ≤ size ≤ 1000 |
+| `dimensions` | `{ x: number, y: number, z: number }` | ボクセル配列のサイズ | 各次元 1 ≤ size ≤ 1024 |
 | `voxelLength` | `number` | ボクセル間隔（メートル単位） | > 0（表示には非使用、メタデータのみ） |
 | `values` | `Uint8Array` | ボクセル値の1次元配列（X*Y*Z要素） | length === X * Y * Z |
 | `fileName` | `string` | 元ファイル名 | - |
@@ -284,7 +284,7 @@ interface ParseWarning {
 | Rule | Description | Error/Warning |
 |------|-------------|---------------|
 | **Header format** | "X Y Z [voxelLength]" 形式 | Error |
-| **Size range** | 1 ≤ X,Y,Z ≤ 1000 | Error (FR-008) |
+| **Size range** | 1 ≤ X,Y,Z ≤ 1024 | Error (FR-008) |
 | **Row count** | 行数 === X * Y | Error (FR-011) |
 | **Values per row** | 各行のZ値数 === Z | Error (FR-011) |
 | **Value range** | 0 ≤ value ≤ 255 | Warning（自動clamp） |
@@ -323,7 +323,7 @@ interface RenderingMetrics {
 
 ### Target Values (from research.md)
 
-| Metric | 200³ Target | 1000³ Target |
+| Metric | 200³ Target | 1024³ Target |
 |--------|-------------|--------------|
 | `timeToFirstFrame` | <5000ms | <15000ms |
 | `averageFps` | >30fps | >20fps |

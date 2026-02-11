@@ -9,7 +9,7 @@
 
 ## Summary
 
-VS Code拡張機能として.leSボクセルファイルの3Dビューアーを実装する。ファイルツリーから直接開く、テキストエディタから切り替える、コマンドパレットからドラッグ&ドロップの3つの導線を提供。React Three Fiberをベースに、密な大規模ボクセル（最大1000³）をシェーダーベースでレンダリングし、200³で5秒以内の初回描画を実現する。
+VS Code拡張機能として.leSボクセルファイルの3Dビューアーを実装する。ファイルツリーから直接開く、テキストエディタから切り替える、コマンドパレットからドラッグ&ドロップの3つの導線を提供。React Three Fiberをベースに、密な大規模ボクセル（最大1024³）をシェーダーベースでレンダリングし、200³で5秒以内の初回描画を実現する。
 
 ## Technical Context
 
@@ -19,8 +19,8 @@ VS Code拡張機能として.leSボクセルファイルの3Dビューアーを�
 **Testing**: VS Code Test Framework (@vscode/test-electron, Mocha)、パフォーマンスベンチマーク  
 **Target Platform**: VS Code Extension (Webview/WebGL2環境)  
 **Project Type**: VS Code Extension (CustomEditorProvider + Webview分離構造)  
-**Performance Goals**: 200³で初回描画<5秒 (NFR-001)、操作時30fps以上 (NFR-002)、1000³で初回<15秒  
-**Constraints**: 最大1000³ボクセル (~1GB)、WebGL2必須、CSP準拠、バンドルサイズ<2MB、密データが基本  
+**Performance Goals**: 200³で初回描画<5秒 (NFR-001)、操作時30fps以上 (NFR-002)、1024³で初回<15秒  
+**Constraints**: 最大1024³ボクセル (~1GB)、WebGL2必須、CSP準拠、バンドルサイズ<2MB、密データが基本  
 **Scale/Scope**: 単一機能拡張、3つの導線（Custom Editor既定、コマンド+D&D、テキスト切替）、効率的レイマーチング
 
 ## Constitution Check
@@ -55,7 +55,7 @@ VS Code拡張機能として.leSボクセルファイルの3Dビューアーを�
   - VS Code標準UIパターン活用（Reopen With...等）
 
 - ✅ **パフォーマンス**:
-  - 目標値明確化（200³<5秒、1000³<15秒）
+  - 目標値明確化（200³<5秒、1024³<15秒）
   - 測定フレームワーク定義（RenderingMetrics）
   - 最適化戦略4段階（research.md Phase 1-4）
   - ベンチマークスイート計画（3ファイル）

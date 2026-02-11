@@ -352,7 +352,7 @@ Webview内でエラーが発生したことを通知。
 |------|---------|-------------|
 | `PARSE_ERROR` | "Failed to parse .leS file" | パース失敗 |
 | `INVALID_HEADER` | "Invalid header format" | ヘッダ形式エラー |
-| `SIZE_EXCEEDED` | "Voxel size exceeds limit (1000³)" | サイズ上限超過 |
+| `SIZE_EXCEEDED` | "Voxel size exceeds limit (1024³)" | サイズ上限超過 |
 | `DATA_MISMATCH` | "Data size mismatch" | データとヘッダの不整合 |
 | `GPU_OOM` | "GPU out of memory" | GPUメモリ不足 |
 | `WEBGL_UNSUPPORTED` | "WebGL2 is not supported" | WebGL2未サポート |
