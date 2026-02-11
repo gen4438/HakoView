@@ -350,24 +350,55 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 	const maxDpr = Math.min(currentDevicePixelRatio, 3.0);
 
 	// Levaコントロール
-	const controls = useControls({
+	const [controls, set] = useControls(() => ({
+		'Reset': button(() => {
+			// ボクセル値表示とカスタム色のリセット用オブジェクト
+			const voxelResetValues: Record<string, any> = {};
+			for (let i = 0; i < 16; i++) {
+				voxelResetValues[`visible${i}`] = i !== 0; // 0は非表示、1-15は表示
+				voxelResetValues[`color${i}`] = defaultPalette[i] || "#000000";
+			}
+
+			// すべての設定をデフォルト値に戻す
+			set({
+				alpha: defaultValues.current.alpha,
+				dpr: maxDpr,
+				fov: defaultValues.current.fov,
+				far: defaultValues.current.far,
+				lightIntensity: defaultValues.current.lightIntensity,
+				ambientIntensity: defaultValues.current.ambientIntensity,
+				enableEdgeHighlight: defaultValues.current.enableEdgeHighlight,
+				edgeThickness: defaultValues.current.edgeThickness,
+				edgeColor: defaultValues.current.edgeColor,
+				edgeIntensity: defaultValues.current.edgeIntensity,
+				edgeMaxDistance: defaultValues.current.edgeMaxDistance,
+				clippingMode: defaultValues.current.clippingMode,
+				sliceAxis: defaultValues.current.sliceAxis,
+				slicePosition: defaultValues.current.slicePosition,
+				sliceReverse: defaultValues.current.sliceReverse,
+				customNormalX: defaultValues.current.customNormalX,
+				customNormalY: defaultValues.current.customNormalY,
+				customNormalZ: defaultValues.current.customNormalZ,
+				customDistance: defaultValues.current.customDistance,
+				...voxelResetValues,
+			});
+
+			// React状態もリセット（onChangeが呼ばれない場合のため）
+			setValueVisibility(Array(16).fill(0).map((_, i) => i !== 0));
+			setCustomColors(Array(16).fill("").map((_, i) => defaultPalette[i] || "#000000"));
+
+			// カメラ位置もリセット
+			if (controlsRef.current) {
+				controlsRef.current.reset();
+			}
+		}),
 		// usePerspective: { value: true, label: 'Perspective' },
-		camera: folder({
-			fov: { value: 50, min: 0, max: 180, step: 5 },
-			far: { value: 1000, min: 500, max: 3000, step: 100 },
-		}, { collapsed: true }),
-		alpha: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 },
-		dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
-		lighting: folder({
-			lightIntensity: { value: 0.8, min: 0.0, max: 2.0, step: 0.01 },
-			ambientIntensity: { value: 0.4, min: 0.0, max: 1.0, step: 0.01 },
-		}, { collapsed: true }),
 		edgeHighlight: folder({
-			enableEdgeHighlight: { value: false },
-			edgeThickness: { value: 0.05, min: 0.02, max: 0.15, step: 0.01 },
-			edgeColor: { value: "#ffffff" },
-			edgeIntensity: { value: 0.8, min: 0.0, max: 1.0, step: 0.01 },
-			edgeMaxDistance: { value: 200, min: 50, max: 1000, step: 10 },
+			enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
+			edgeThickness: { value: defaultValues.current.edgeThickness, min: 0.02, max: 0.15, step: 0.01 },
+			edgeColor: { value: defaultValues.current.edgeColor },
+			edgeIntensity: { value: defaultValues.current.edgeIntensity, min: 0.0, max: 1.0, step: 0.01 },
+			edgeMaxDistance: { value: defaultValues.current.edgeMaxDistance, min: 50, max: 1000, step: 10 },
 		}, { collapsed: true }),
 		voxelColors: folder({
 			// 0-15値制御を動的生成（0も他と同じ扱い）
@@ -384,19 +415,29 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 			}), {}),
 		}, { collapsed: true }),
 		clipping: folder({
-			clippingMode: { value: "Off", options: ["Off", "Slice", "Custom"] },
-			sliceAxis: { value: "Y", options: ["X", "Y", "Z"], render: (get: any) => get('clipping.clippingMode') === 'Slice' },
-			slicePosition: { value: 0, min: -150, max: 150, step: 1, render: (get: any) => get('clipping.clippingMode') === 'Slice' },
-			sliceReverse: { value: false, label: "Reverse Direction", render: (get: any) => get('clipping.clippingMode') === 'Slice' },
-			customNormalX: { value: 0, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
-			customNormalY: { value: 1, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
-			customNormalZ: { value: 0, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
-			customDistance: { value: 0, min: -300, max: 300, step: 1, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
+			clippingMode: { value: defaultValues.current.clippingMode, options: ["Off", "Slice", "Custom"] },
+			sliceAxis: { value: defaultValues.current.sliceAxis, options: ["X", "Y", "Z"], render: (get: any) => get('clipping.clippingMode') === 'Slice' },
+			slicePosition: { value: defaultValues.current.slicePosition, min: -150, max: 150, step: 1, render: (get: any) => get('clipping.clippingMode') === 'Slice' },
+			sliceReverse: { value: defaultValues.current.sliceReverse, label: "Reverse Direction", render: (get: any) => get('clipping.clippingMode') === 'Slice' },
+			customNormalX: { value: defaultValues.current.customNormalX, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
+			customNormalY: { value: defaultValues.current.customNormalY, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
+			customNormalZ: { value: defaultValues.current.customNormalZ, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
+			customDistance: { value: defaultValues.current.customDistance, min: -300, max: 300, step: 1, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
 		}, { collapsed: true }),
-	}, [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]);
+		dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
+		alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
+		camera: folder({
+			fov: { value: defaultValues.current.fov, min: 0, max: 180, step: 5 },
+			far: { value: defaultValues.current.far, min: 500, max: 3000, step: 100 },
+		}, { collapsed: true }),
+		lighting: folder({
+			lightIntensity: { value: defaultValues.current.lightIntensity, min: 0.0, max: 2.0, step: 0.01 },
+			ambientIntensity: { value: defaultValues.current.ambientIntensity, min: 0.0, max: 1.0, step: 0.01 },
+		}, { collapsed: true }),
+	}), [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]);
 
+	const usePerspective = true; // 固定でパース投影を使用
 	const {
-		// usePerspective,
 		fov, far, alpha, dpr,
 		lightIntensity, ambientIntensity,
 		enableEdgeHighlight, edgeThickness, edgeColor, edgeIntensity, edgeMaxDistance,
