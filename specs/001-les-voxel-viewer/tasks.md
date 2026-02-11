@@ -13,12 +13,12 @@
 
 **Purpose**: プロジェクト初期化と基本構造
 
-- [ ] T001 予定のディレクトリ構造を作成する: src/voxelEditor/, src/voxelParser/, src/commands/, webview/src/components/, webview/src/hooks/, webview/src/shaders/, webview/src/types/, webview/dist/
-- [ ] T002 Webview用の依存関係とscriptsを追加した webview/package.json を作成する
-- [ ] T003 Webview用のTypeScript設定を webview/tsconfig.json に作成する
-- [ ] T004 Webviewバンドル設定を esbuild.webview.js に作成する
-- [ ] T005 [P] pre-commit を有効化するため、package.json と .husky/pre-commit と .lintstagedrc.json を追加・設定する
-- [ ] T006 [P] ルートのbuild/watch用scriptsを package.json に追加する
+- [X] T001 予定のディレクトリ構造を作成する: src/voxelEditor/, src/voxelParser/, src/commands/, webview/src/components/, webview/src/hooks/, webview/src/shaders/, webview/src/types/, webview/dist/
+- [X] T002 Webview用の依存関係とscriptsを追加した webview/package.json を作成する
+- [X] T003 Webview用のTypeScript設定を webview/tsconfig.json に作成する
+- [X] T004 Webviewバンドル設定を esbuild.webview.js に作成する
+- [X] T005 [P] pre-commit を有効化するため、package.json と .husky/pre-commit と .lintstagedrc.json を追加・設定する
+- [X] T006 [P] ルートのbuild/watch用scriptsを package.json に追加する
 
 ---
 
@@ -26,12 +26,12 @@
 
 **Purpose**: すべてのストーリーに共通の基盤
 
-- [ ] T007 VoxelDataset/Dimensions とヘルパーを src/voxelParser/VoxelData.ts に実装する
-- [ ] T008 [P] Webview側の型定義を webview/src/types/voxel.d.ts に追加する
-- [ ] T009 解析バリデーションの共通処理を src/voxelParser/validation.ts に実装する
-- [ ] T010 Extension-Webview通信の型/ユーティリティを src/voxelEditor/messaging.ts に実装する
-- [ ] T011 [P] Webview通信フックの骨組みを webview/src/hooks/useExtensionMessage.ts に実装する
-- [ ] T012 [P] CSP対応のHTML生成ヘルパーを src/voxelEditor/getWebviewHtml.ts に実装する
+- [X] T007 VoxelDataset/Dimensions とヘルパーを src/voxelParser/VoxelData.ts に実装する
+- [X] T008 [P] Webview側の型定義を webview/src/types/voxel.d.ts に追加する
+- [X] T009 解析バリデーションの共通処理を src/voxelParser/validation.ts に実装する
+- [X] T010 Extension-Webview通信の型/ユーティリティを src/voxelEditor/messaging.ts に実装する
+- [X] T011 [P] Webview通信フックの骨組みを webview/src/hooks/useExtensionMessage.ts に実装する
+- [X] T012 [P] CSP対応のHTML生成ヘルパーを src/voxelEditor/getWebviewHtml.ts に実装する
 
 ---
 
@@ -48,20 +48,20 @@
 
 ### Implementation for User Story 1
 
-- [ ] T015 [P] [US1] .leSパーサー本体を src/voxelParser/LesParser.ts に実装する
-- [ ] T016 [P] [US1] VoxelDocumentを src/voxelEditor/VoxelDocument.ts に実装する
-- [ ] T017 [US1] CustomEditorProviderを src/voxelEditor/VoxelEditorProvider.ts に実装する
-- [ ] T018 [US1] Extension-Webviewメッセージングを src/voxelEditor/messaging.ts に接続する
-- [ ] T019 [US1] カスタムエディタ登録を package.json に追加する
-- [ ] T020 [P] [US1] Webviewエントリを webview/src/index.tsx に実装する
-- [ ] T021 [P] [US1] VoxelViewerコンポーネントを webview/src/VoxelViewer.tsx に実装する
-- [ ] T022 [P] [US1] シェーダーを webview/src/shaders/voxel.vert と webview/src/shaders/voxel.frag に移植する
-- [ ] T023 [P] [US1] VoxelRendererを webview/src/VoxelRenderer.tsx に実装する
-- [ ] T024 [P] [US1] エラー表示UIを webview/src/components/ErrorDisplay.tsx に実装する
-- [ ] T025 [US1] loadVoxelData処理を webview/src/hooks/useExtensionMessage.ts に実装する
-- [ ] T026 [US1] Webview HTML生成を src/voxelEditor/getWebviewHtml.ts に実装する
-- [ ] T027 [P] [US1] openAsTextコマンドを src/commands/openAsText.ts に実装する
-- [ ] T028 [US1] openAsText登録を package.json と src/extension.ts に追加する
+- [X] T015 [P] [US1] .leSパーサー本体を src/voxelParser/LesParser.ts に実装する
+- [X] T016 [P] [US1] VoxelDocumentを src/voxelEditor/VoxelDocument.ts に実装する
+- [X] T017 [US1] CustomEditorProviderを src/voxelEditor/VoxelEditorProvider.ts に実装する
+- [X] T018 [US1] Extension-Webviewメッセージングを src/voxelEditor/messaging.ts に接続する
+- [X] T019 [US1] カスタムエディタ登録を package.json に追加する
+- [X] T020 [P] [US1] Webviewエントリを webview/src/index.tsx に実装する
+- [X] T021 [P] [US1] VoxelViewerコンポーネントを webview/src/VoxelViewer.tsx に実装する
+- [X] T022 [P] [US1] シェーダーを webview/src/shaders/voxel.vert と webview/src/shaders/voxel.frag に移植する
+- [X] T023 [P] [US1] VoxelRendererを webview/src/VoxelRenderer.tsx に実装する
+- [X] T024 [P] [US1] エラー表示UIを webview/src/components/ErrorDisplay.tsx に実装する
+- [X] T025 [US1] loadVoxelData処理を webview/src/hooks/useExtensionMessage.ts に実装する
+- [X] T026 [US1] Webview HTML生成を src/voxelEditor/getWebviewHtml.ts に実装する
+- [X] T027 [P] [US1] openAsTextコマンドを src/commands/openAsText.ts に実装する (inline in extension.ts)
+- [X] T028 [US1] openAsText登録を package.json と src/extension.ts に追加する
 
 **Checkpoint**: User Story 1 単体で描画が成立する
 
@@ -79,9 +79,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T030 [P] [US2] openFromEditorコマンドを src/commands/openFromEditor.ts に実装する
-- [ ] T031 [US2] openFromEditorのcommand/menuを package.json に追加する
-- [ ] T032 [US2] コマンド登録を src/extension.ts に追加する
+- [X] T030 [P] [US2] openFromEditorコマンドを src/commands/openFromEditor.ts に実装する (inline in extension.ts)
+- [X] T031 [US2] openFromEditorのcommand/menuを package.json に追加する
+- [X] T032 [US2] コマンド登録を src/extension.ts に追加する
 
 **Checkpoint**: User Story 2 単体で切り替えが成立する
 

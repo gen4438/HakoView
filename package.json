@@ -9,29 +9,78 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onCustomEditor:hakoview.lesViewer",
+    "onCommand:hakoview.openVoxelViewer",
+    "onCommand:hakoview.openFromEditor",
+    "onCommand:hakoview.openAsText"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "hakoview.lesViewer",
+        "displayName": "LES Voxel Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.leS"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "commands": [
       {
-        "command": "hakoview.helloWorld",
-        "title": "Hello World"
+        "command": "hakoview.openAsText",
+        "title": "Reopen as Text",
+        "category": "Hakoview"
+      },
+      {
+        "command": "hakoview.openFromEditor",
+        "title": "Open in Voxel Viewer",
+        "category": "Hakoview"
+      },
+      {
+        "command": "hakoview.openVoxelViewer",
+        "title": "Open Voxel Viewer",
+        "category": "Hakoview"
       }
-    ]
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "hakoview.openFromEditor",
+          "when": "resourceExtname == .leS",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "hakoview.openAsText",
+          "when": "activeCustomEditorId == hakoview.lesViewer"
+        },
+        {
+          "command": "hakoview.openFromEditor",
+          "when": "resourceExtname == .leS"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "pnpm run package",
-    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js && node esbuild.webview.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
+    "watch:webview": "node esbuild.webview.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production && node esbuild.webview.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "install:webview": "cd webview && pnpm install"
   },
   "devDependencies": {
     "@types/vscode": "^1.109.0",
