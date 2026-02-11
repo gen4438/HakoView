@@ -79,19 +79,34 @@
     "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\" \"webview/src/**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\" \"webview/src/**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "test": "vscode-test",
-    "install:webview": "cd webview && pnpm install"
+    "install:webview": "cd webview && pnpm install",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@types/vscode": "^1.109.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.54.0",
-    "eslint": "^9.39.2",
-    "esbuild": "^0.27.2",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3",
+    "@types/vscode": "^1.109.0",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,css}": [
+      "prettier --write"
+    ]
   }
 }

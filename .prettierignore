@@ -1,0 +1,16 @@
+# 依存関係
+node_modules/
+webview/node_modules/
+
+# ビルド出力
+dist/
+out/
+*.vsix
+
+# 設定ファイル
+pnpm-lock.yaml
+package-lock.json
+
+# その他
+.vscode-test/
+coverage/

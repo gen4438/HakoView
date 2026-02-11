@@ -4,42 +4,42 @@ import * as vscode from 'vscode';
  * WebviewのHTML生成オプション
  */
 export interface WebviewHtmlOptions {
-	/** Webviewインスタンス */
-	webview: vscode.Webview;
-	/** 拡張機能のコンテキスト */
-	extensionUri: vscode.Uri;
-	/** CSP nonce（生成する場合は省略可） */
-	nonce?: string;
+  /** Webviewインスタンス */
+  webview: vscode.Webview;
+  /** 拡張機能のコンテキスト */
+  extensionUri: vscode.Uri;
+  /** CSP nonce（生成する場合は省略可） */
+  nonce?: string;
 }
 
 /**
  * WebviewのHTMLコンテンツを生成
  */
 export function getWebviewHtml(options: WebviewHtmlOptions): string {
-	const { webview, extensionUri, nonce: customNonce } = options;
+  const { webview, extensionUri, nonce: customNonce } = options;
 
-	// Webview用スクリプトのURI取得
-	const scriptUri = webview.asWebviewUri(
-		vscode.Uri.joinPath(extensionUri, 'webview', 'dist', 'webview.js')
-	);
+  // Webview用スクリプトのURI取得
+  const scriptUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'webview', 'dist', 'webview.js')
+  );
 
-	// CSP用のnonce生成（セキュリティ）
-	const nonce = customNonce || getNonce();
+  // CSP用のnonce生成（セキュリティ）
+  const nonce = customNonce || getNonce();
 
-	// CSP (Content Security Policy) 設定
-	// - script-src: スクリプトの読み込み元を制限
-	// - style-src: スタイルの読み込み元を制限
-	// - img-src: 画像の読み込み元を制限
-	const csp = [
-		`default-src 'none'`,
-		`script-src 'nonce-${nonce}'`,
-		`style-src ${webview.cspSource} 'unsafe-inline'`,
-		`img-src ${webview.cspSource} https: data:`,
-		`connect-src ${webview.cspSource}`,
-		`font-src ${webview.cspSource}`,
-	].join('; ');
+  // CSP (Content Security Policy) 設定
+  // - script-src: スクリプトの読み込み元を制限
+  // - style-src: スタイルの読み込み元を制限
+  // - img-src: 画像の読み込み元を制限
+  const csp = [
+    `default-src 'none'`,
+    `script-src 'nonce-${nonce}'`,
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `img-src ${webview.cspSource} https: data:`,
+    `connect-src ${webview.cspSource}`,
+    `font-src ${webview.cspSource}`,
+  ].join('; ');
 
-	return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="ja">
 <head>
 	<meta charset="UTF-8">
@@ -111,10 +111,10 @@ export function getWebviewHtml(options: WebviewHtmlOptions): string {
  * ランダムなnonceを生成（CSP用）
  */
 function getNonce(): string {
-	let text = '';
-	const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-	for (let i = 0; i < 32; i++) {
-		text += possible.charAt(Math.floor(Math.random() * possible.length));
-	}
-	return text;
+  let text = '';
+  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for (let i = 0; i < 32; i++) {
+    text += possible.charAt(Math.floor(Math.random() * possible.length));
+  }
+  return text;
 }
