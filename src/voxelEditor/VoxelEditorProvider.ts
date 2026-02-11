@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { VoxelDocument } from './VoxelDocument';
 import { getWebviewHtml } from './getWebviewHtml';
 import { sendVoxelData, sendError, WebviewToExtensionMessage } from './messaging';
+import { LesParser } from '../voxelParser/LesParser';
+import { ParseError } from '../voxelParser/validation';
 
 /**
  * CustomEditorProvider for .leS voxel files
@@ -187,10 +189,18 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
           break;
 
         case 'loadFile':
-          // D&Dでファイルをロード（US3用、現在は未対応）
-          vscode.window.showInformationMessage(
-            'Drag & drop support will be available in User Story 3'
-          );
+          try {
+            const data = new Uint8Array(message.data);
+            const dataset = LesParser.parse(data, message.fileName);
+            sendVoxelData(webviewPanel.webview, dataset, true);
+          } catch (error) {
+            const errorMessage =
+              error instanceof ParseError
+                ? `Failed to parse voxel file: ${error.message}`
+                : `Failed to load voxel file: ${error instanceof Error ? error.message : String(error)}`;
+            sendError(webviewPanel.webview, errorMessage);
+            vscode.window.showErrorMessage(errorMessage);
+          }
           break;
 
         case 'saveState':
@@ -206,6 +216,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
         case 'openAsText':
           // テキストエディタで開く
           await vscode.commands.executeCommand('vscode.openWith', document.uri, 'default');
+          break;
+
+        case 'reportMetrics':
+          console.log('Voxel rendering metrics:', message.metrics);
           break;
       }
     });

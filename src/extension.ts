@@ -2,6 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { VoxelEditorProvider } from './voxelEditor/VoxelEditorProvider';
+import { registerOpenVoxelViewerCommand } from './commands/openVoxelViewer';
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -46,13 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   // Register openVoxelViewer command (User Story 3)
-  context.subscriptions.push(
-    vscode.commands.registerCommand('hakoview.openVoxelViewer', () => {
-      vscode.window.showInformationMessage(
-        'User Story 3: Empty viewer with drag & drop will be implemented next.'
-      );
-    })
-  );
+  context.subscriptions.push(registerOpenVoxelViewerCommand(context));
 }
 
 // This method is called when your extension is deactivated

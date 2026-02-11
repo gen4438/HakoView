@@ -1,0 +1,10 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <g stroke="#ffffff" stroke-width="4" stroke-linejoin="round">
+    <!-- Top Face (Yellow) -->
+    <path d="M50 10 L90 30 L50 50 L10 30 Z" fill="#FFD700"/>
+    <!-- Right Face (Red) -->
+    <path d="M50 50 L90 30 V75 L50 95 Z" fill="#FF4136"/>
+    <!-- Left Face (Blue) -->
+    <path d="M50 50 L10 30 V75 L50 95 Z" fill="#0074D9"/>
+  </g>
+</svg>

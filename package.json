@@ -3,17 +3,12 @@
   "displayName": "Hako View",
   "description": "A lightweight Voxel model visualizer for VS Code.",
   "version": "0.0.1",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.109.0"
   },
   "categories": [
     "Other"
-  ],
-  "activationEvents": [
-    "onCustomEditor:hakoview.lesViewer",
-    "onCommand:hakoview.openVoxelViewer",
-    "onCommand:hakoview.openFromEditor",
-    "onCommand:hakoview.openAsText"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -38,7 +33,8 @@
       {
         "command": "hakoview.openFromEditor",
         "title": "Open in Voxel Viewer",
-        "category": "Hakoview"
+        "category": "Hakoview",
+        "icon": "images/icon.svg"
       },
       {
         "command": "hakoview.openVoxelViewer",

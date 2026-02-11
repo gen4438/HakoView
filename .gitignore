@@ -1,6 +1,7 @@
 # Build outputs
 out
 dist
+build
 node_modules
 *.vsix
 
@@ -19,6 +20,7 @@ pnpm-debug.log*
 
 # IDEs
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
