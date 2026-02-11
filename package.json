@@ -4,6 +4,11 @@
   "description": "A lightweight Voxel model visualizer for VS Code.",
   "version": "0.0.1",
   "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gen4438/HakoView"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.109.0"
   },
@@ -79,7 +84,11 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,md}\" \"webview/src/**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "test": "vscode-test",
     "install:webview": "cd webview && pnpm install",
-    "prepare": "husky"
+    "prepare": "husky",
+    "vsix": "pnpm run package && vsce package --out dist/hakoview.vsix --allow-missing-repository",
+    "publish:marketplace": "vsce publish --allow-missing-repository",
+    "publish:openvsx": "ovsx publish --allow-missing-repository",
+    "publish": "pnpm run vsix && pnpm run publish:marketplace && pnpm run publish:openvsx"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -87,11 +96,13 @@
     "@types/vscode": "^1.109.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.27.2",
     "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2",
     "npm-run-all": "^4.1.5",
+    "ovsx": "^0.10.9",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.54.0"
