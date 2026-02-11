@@ -396,7 +396,7 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 	}, [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]);
 
 	const {
-		usePerspective,
+		// usePerspective,
 		fov, far, alpha, dpr,
 		lightIntensity, ambientIntensity,
 		enableEdgeHighlight, edgeThickness, edgeColor, edgeIntensity, edgeMaxDistance,
