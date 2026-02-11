@@ -221,7 +221,7 @@ interface LesHeader {
 
 interface LesFile {
   header: LesHeader;
-  values: Uint8Array;  // length = X * Y * Z
+  values: Uint8Array; // length = X * Y * Z
 }
 ```
 
@@ -229,39 +229,31 @@ interface LesFile {
 
 ```typescript
 function parseLes(content: string): LesFile {
-  const lines = content.split('\n').filter(line => line.trim());
-  
+  const lines = content.split("\n").filter((line) => line.trim());
+
   // ヘッダーパース
   const headerParts = lines[0].split(/\s+/);
   const header: LesHeader = {
     x: parseInt(headerParts[0]),
     y: parseInt(headerParts[1]),
     z: parseInt(headerParts[2]),
-    voxelLength: headerParts[3] ? parseFloat(headerParts[3]) : undefined
+    voxelLength: headerParts[3] ? parseFloat(headerParts[3]) : undefined,
   };
-  
+
   // データパース
   const values = new Uint8Array(header.x * header.y * header.z);
   let index = 0;
-  
+
   for (let i = 1; i < lines.length; i++) {
-    const rowValues = lines[i].split(/\s+/).map(v => parseInt(v));
+    const rowValues = lines[i].split(/\s+/).map((v) => parseInt(v));
     for (const val of rowValues) {
       values[index++] = val;
     }
   }
-  
+
   return { header, values };
 }
 ```
-
----
-
-## 参考資料
-
-- 原典: GeoDict software (www.geodict.com)
-- 本プロジェクト: [data-model.md](./data-model.md)
-- パーサー実装: `src/voxelParser/LesParser.ts`
 
 ---
 

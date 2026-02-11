@@ -23,7 +23,6 @@ uniform float uEdgeFadeStart; // エッジフェード開始距離
 uniform float uEdgeFadeEnd; // エッジフェード終了距離
 uniform mat4 uModelMatrixInverse;
 uniform float uValueVisibility[16]; // 各ボクセル値の表示フラグ (0.0=非表示, 1.0=表示)
-uniform float uShowZeroValues; // 0値表示専用フラグ
 
 varying vec3 vOrigin;
 varying vec3 vDirection;
@@ -45,14 +44,8 @@ vec4 sampleVoxel(vec3 objCenter) {
     float index = texture(uTexture, texel01).r * 255.0;
     int voxelValue = int(index);
     
-    // ボクセル値の表示制御チェック
-    if (voxelValue == 0) {
-        // 0値の場合は専用フラグでチェック
-        if (uShowZeroValues < 0.5) {
-            return vec4(0.0);
-        }
-    } else if (voxelValue > 0 && voxelValue < 16) {
-        // 1-15値の場合は配列でチェック（WebGL2動的インデックス）
+    // ボクセル値の表示制御チェック（0-15すべて配列で統一）
+    if (voxelValue >= 0 && voxelValue < 16) {
         if (uValueVisibility[voxelValue] < 0.5) {
             return vec4(0.0);
         }

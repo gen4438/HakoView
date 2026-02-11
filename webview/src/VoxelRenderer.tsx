@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera, GizmoHelper, GizmoViewport, Stats, shaderMaterial } from '@react-three/drei';
-import { folder, useControls, Leva } from 'leva';
+import { TrackballControls, PerspectiveCamera, OrthographicCamera, GizmoHelper, GizmoViewport, Stats, shaderMaterial } from '@react-three/drei';
+import { folder, useControls, Leva, button } from 'leva';
 import { useWindowSize } from 'react-use';
 import * as THREE from 'three';
 import type { VoxelDataMessage } from './types/voxel';
@@ -34,7 +34,6 @@ const VoxelShaderMaterial = shaderMaterial(
 		uEdgeFadeStart: 0,
 		uEdgeFadeEnd: 100,
 		uValueVisibility: new Array(16).fill(1.0),
-		uShowZeroValues: 0.0,
 	},
 	vertexShader,
 	fragmentShader
@@ -80,7 +79,6 @@ interface VoxelMeshProps {
 	voxelData: VoxelDataMessage;
 	alpha: number;
 	wireframe: boolean;
-	color: string;
 	lightIntensity: number;
 	ambientIntensity: number;
 	clippingPlane: { normal: THREE.Vector3; distance: number };
@@ -92,7 +90,6 @@ interface VoxelMeshProps {
 	edgeFadeStart: number;
 	edgeFadeEnd: number;
 	valueVisibility: boolean[];
-	showZeroValues: boolean;
 	customColors: string[];
 }
 
@@ -101,7 +98,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 		voxelData,
 		alpha,
 		wireframe,
-		color,
 		lightIntensity,
 		ambientIntensity,
 		clippingPlane,
@@ -113,7 +109,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 		edgeFadeStart,
 		edgeFadeEnd,
 		valueVisibility,
-		showZeroValues,
 		customColors,
 	} = props;
 
@@ -128,11 +123,10 @@ function VoxelMesh(props: VoxelMeshProps) {
 			dimensions: voxelData.dimensions,
 			voxelLength: voxelData.voxelLength,
 			alpha,
-			color,
 			lightIntensity,
 			ambientIntensity
 		});
-	}, [voxelData, alpha, color, lightIntensity, ambientIntensity]);
+	}, [voxelData, alpha, lightIntensity, ambientIntensity]);
 
 	// 3Dテクスチャ作成
 	const dataTexture = useMemo(() => {
@@ -167,7 +161,7 @@ function VoxelMesh(props: VoxelMeshProps) {
 			data[i * 4 + 0] = Math.floor(color.r * 255);
 			data[i * 4 + 1] = Math.floor(color.g * 255);
 			data[i * 4 + 2] = Math.floor(color.b * 255);
-			data[i * 4 + 3] = i === 0 ? (showZeroValues ? 255 : 0) : 255; // 0番の透明度制御
+			data[i * 4 + 3] = i === 0 ? (valueVisibility[0] ? 255 : 0) : 255; // 0番の透明度制御
 		}
 
 		const texture = new THREE.DataTexture(
@@ -182,7 +176,7 @@ function VoxelMesh(props: VoxelMeshProps) {
 		texture.needsUpdate = true;
 
 		return texture;
-	}, [customColors, showZeroValues]);
+	}, [customColors, valueVisibility]);
 
 	// VoxelShaderMaterialは既にグローバルで定義されているので削除
 
@@ -211,7 +205,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 
 		console.log('🔄 Updating shader uniforms:', {
 			alpha,
-			color,
 			lightIntensity,
 			ambientIntensity,
 			hasUniforms: !!materialRef.current.uniforms
@@ -220,7 +213,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 		const u = materialRef.current.uniforms;
 
 		u.uAlpha.value = alpha;
-		u.uColor.value.set(color);
 		u.uLightIntensity.value = lightIntensity;
 		u.uAmbientIntensity.value = ambientIntensity;
 
@@ -243,7 +235,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 
 		// ボクセル値表示制御
 		u.uValueVisibility.value = valueVisibility.map(v => v ? 1.0 : 0.0);
-		u.uShowZeroValues.value = showZeroValues ? 1.0 : 0.0;
 
 		// パレットテクスチャを更新
 		u.uPaletteTexture.value = paletteTexture;
@@ -251,11 +242,11 @@ function VoxelMesh(props: VoxelMeshProps) {
 
 		console.log('✅ Uniforms updated successfully, uAlpha.value:', u.uAlpha.value);
 	}, [
-		alpha, color, lightIntensity, ambientIntensity,
+		alpha, lightIntensity, ambientIntensity,
 		clippingPlane, enableClipping,
 		enableEdgeHighlight, edgeThickness, edgeColor, edgeIntensity,
 		edgeFadeStart, edgeFadeEnd,
-		valueVisibility, showZeroValues, paletteTexture
+		valueVisibility, paletteTexture
 	]);
 
 	// フレームごとに変わる値のみuseFrameで更新
@@ -293,6 +284,9 @@ function VoxelMesh(props: VoxelMeshProps) {
 }
 
 export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
+	// TrackballControlsのrefを作成
+	const controlsRef = useRef<any>(null);
+
 	// デバッグログ
 	useEffect(() => {
 		console.log('VoxelRenderer received data:', {
@@ -302,9 +296,53 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 		});
 	}, [voxelData]);
 
-	// 状態管理（カラーカスタマイズは後で実装）
-	const valueVisibility = Array(16).fill(true);
-	const customColors = Array(16).fill("").map((_, i) => defaultPalette[i] || "#000000");
+	// ボクセル値表示制御の状態（0は初期値非表示）
+	const [valueVisibility, setValueVisibility] = useState<boolean[]>(
+		Array(16).fill(0).map((_, i) => i !== 0)
+	);
+	const [customColors, setCustomColors] = useState<string[]>(
+		Array(16).fill("").map((_, i) => defaultPalette[i] || "#000000")
+	);
+
+	// デフォルト値を保存
+	const defaultValues = useRef({
+		fov: 50,
+		far: 1000,
+		alpha: 1.0,
+		lightIntensity: 0.8,
+		ambientIntensity: 0.4,
+		enableEdgeHighlight: false,
+		edgeThickness: 0.05,
+		edgeColor: "#ffffff",
+		edgeIntensity: 0.8,
+		edgeMaxDistance: 200,
+		clippingMode: "Off",
+		sliceAxis: "Y",
+		slicePosition: 0,
+		sliceReverse: false,
+		customNormalX: 0,
+		customNormalY: 1,
+		customNormalZ: 0,
+		customDistance: 0,
+		usePerspective: true,
+	});
+
+	// Levaから独立した状態更新関数
+	const updateValueVisibility = useCallback((index: number, value: boolean) => {
+		setValueVisibility(prev => {
+			const newVisibility = [...prev];
+			newVisibility[index] = value;
+			return newVisibility;
+		});
+	}, []);
+
+	const updateCustomColor = useCallback((index: number, value: string) => {
+		setCustomColors(prev => {
+			const newColors = [...prev];
+			newColors[index] = value;
+			return newColors;
+		});
+	}, []);
 
 	// DPR管理
 	const { width, height } = useWindowSize();
@@ -313,26 +351,38 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 
 	// Levaコントロール
 	const controls = useControls({
+		// usePerspective: { value: true, label: 'Perspective' },
 		camera: folder({
 			fov: { value: 50, min: 0, max: 180, step: 5 },
 			far: { value: 1000, min: 500, max: 3000, step: 100 },
-		}),
+		}, { collapsed: true }),
 		alpha: { value: 1.0, min: 0.0, max: 1.0, step: 0.01 },
-		color: { value: "#ffffff" },
 		dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
 		lighting: folder({
 			lightIntensity: { value: 0.8, min: 0.0, max: 2.0, step: 0.01 },
 			ambientIntensity: { value: 0.4, min: 0.0, max: 1.0, step: 0.01 },
-		}),
+		}, { collapsed: true }),
 		edgeHighlight: folder({
 			enableEdgeHighlight: { value: false },
 			edgeThickness: { value: 0.05, min: 0.02, max: 0.15, step: 0.01 },
 			edgeColor: { value: "#ffffff" },
 			edgeIntensity: { value: 0.8, min: 0.0, max: 1.0, step: 0.01 },
 			edgeMaxDistance: { value: 200, min: 50, max: 1000, step: 10 },
-		}),
-		// voxelValues機能は一時的に無効化
-		showZeroValues: { value: false },
+		}, { collapsed: true }),
+		voxelColors: folder({
+			// 0-15値制御を動的生成（0も他と同じ扱い）
+			...Array.from({ length: 16 }, (_, i) => i).reduce((acc, i) => ({
+				...acc,
+				[`visible${i}`]: {
+					value: valueVisibility[i],
+					onChange: (value: boolean) => updateValueVisibility(i, value)
+				},
+				[`color${i}`]: {
+					value: customColors[i],
+					onChange: (value: string) => updateCustomColor(i, value)
+				},
+			}), {}),
+		}, { collapsed: true }),
 		clipping: folder({
 			clippingMode: { value: "Off", options: ["Off", "Slice", "Custom"] },
 			sliceAxis: { value: "Y", options: ["X", "Y", "Z"], render: (get: any) => get('clipping.clippingMode') === 'Slice' },
@@ -342,14 +392,14 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 			customNormalY: { value: 1, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
 			customNormalZ: { value: 0, min: -1, max: 1, step: 0.01, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
 			customDistance: { value: 0, min: -300, max: 300, step: 1, render: (get: any) => get('clipping.clippingMode') === 'Custom' },
-		}),
-	});
+		}, { collapsed: true }),
+	}, [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]);
 
 	const {
-		fov, far, alpha, color, dpr,
+		usePerspective,
+		fov, far, alpha, dpr,
 		lightIntensity, ambientIntensity,
 		enableEdgeHighlight, edgeThickness, edgeColor, edgeIntensity, edgeMaxDistance,
-		showZeroValues,
 		clippingMode, sliceAxis, slicePosition, sliceReverse,
 		customNormalX, customNormalY, customNormalZ, customDistance,
 	} = controls;
@@ -384,12 +434,12 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 	// デバッグ: コントロール値確認
 	useEffect(() => {
 		console.log('Controls:', {
-			fov, far, alpha, color, dpr,
+			fov, far, alpha, dpr,
 			lightIntensity, ambientIntensity,
-			enableEdgeHighlight, showZeroValues,
+			enableEdgeHighlight,
 			clippingEnabled: clippingPlane.enabled
 		});
-	}, [fov, far, alpha, color, dpr, lightIntensity, ambientIntensity, enableEdgeHighlight, showZeroValues, clippingPlane.enabled]);
+	}, [fov, far, alpha, dpr, lightIntensity, ambientIntensity, enableEdgeHighlight, clippingPlane.enabled]);
 
 	// DPR変化の監視
 	useEffect(() => {
@@ -405,9 +455,27 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 		};
 	}, []);
 
+	// rキーでカメラリセット
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'r' || event.key === 'R') {
+				if (controlsRef.current) {
+					controlsRef.current.reset();
+				}
+			}
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+
+		return () => {
+			window.removeEventListener('keydown', handleKeyDown);
+		};
+	}, []);
+
 	return (
 		<div style={{ width: '100%', height: '100%', position: 'relative' }}>
 			<Leva
+				collapsed={true}
 				theme={{
 					sizes: {
 						rootWidth: '320px',
@@ -423,22 +491,40 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 				dpr={effectiveDpr}
 				style={{ width: '100%', height: '100%', background: 'transparent' }}
 			>
-				<PerspectiveCamera
-					makeDefault
-					position={[
-						voxelData.dimensions.x * 1.5,
-						voxelData.dimensions.y * 1.5,
-						voxelData.dimensions.z * 1.5
-					]}
-					fov={fov}
-					far={far}
-				/>
+				{usePerspective ? (
+					<PerspectiveCamera
+						makeDefault
+						position={[
+							voxelData.dimensions.x * 1.5,
+							voxelData.dimensions.y * 1.5,
+							voxelData.dimensions.z * 1.5
+						]}
+						fov={fov}
+						far={far}
+					/>
+				) : (
+					<OrthographicCamera
+						makeDefault
+						position={[
+							voxelData.dimensions.x * 1.5,
+							voxelData.dimensions.y * 1.5,
+							voxelData.dimensions.z * 1.5
+						]}
+						zoom={2}
+						near={0.1}
+						far={far}
+					/>
+				)}
 
-				<OrbitControls
-					enableDamping
-					dampingFactor={0.05}
-					maxPolarAngle={Math.PI}
-					minPolarAngle={0}
+				<TrackballControls
+					ref={controlsRef}
+					rotateSpeed={2.0}
+					zoomSpeed={1.2}
+					panSpeed={0.8}
+					noZoom={false}
+					noPan={false}
+					staticMoving={false}
+					dynamicDampingFactor={0.2}
 				/>
 
 				<ambientLight intensity={ambientIntensity} />
@@ -448,7 +534,6 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 					voxelData={voxelData}
 					alpha={alpha}
 					wireframe={false}
-					color={color}
 					lightIntensity={lightIntensity}
 					ambientIntensity={ambientIntensity}
 					clippingPlane={{
@@ -463,7 +548,6 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
 					edgeFadeStart={0}
 					edgeFadeEnd={edgeMaxDistance}
 					valueVisibility={valueVisibility}
-					showZeroValues={showZeroValues}
 					customColors={customColors}
 				/>
 
