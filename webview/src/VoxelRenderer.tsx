@@ -698,7 +698,7 @@ export function VoxelRenderer({ voxelData, settings }: VoxelRendererProps) {
   const effectiveDpr = Math.min(Math.max(dpr, 0.5), maxDpr);
 
   // モデル全体が画面に収まるカメラ初期位置を計算
-  const cameraPosition = useMemo((): [number, number, number] => {
+  const [cameraPosition] = useState((): [number, number, number] => {
     const { x, y, z } = voxelData.dimensions;
     // バウンディングスフィアの半径
     const radius = Math.sqrt(x * x + y * y + z * z) / 2;
@@ -708,11 +708,12 @@ export function VoxelRenderer({ voxelData, settings }: VoxelRendererProps) {
     // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
     const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
     return [dir.x * distance, dir.y * distance, dir.z * distance];
-  }, [voxelData.dimensions]);
+  });
 
   // OrthographicCamera用の初期ズーム値を計算
-  const orthoInitialZoomRef = useRef<number>(1);
+  const orthoInitialZoomRef = useRef<number>(0);
   useMemo(() => {
+    if (orthoInitialZoomRef.current !== 0) return;
     const { x, y, z } = voxelData.dimensions;
     const maxDim = Math.max(x, y, z);
     // Perspectiveと同等の見え方になるよう調整
