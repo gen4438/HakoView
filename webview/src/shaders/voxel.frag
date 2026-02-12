@@ -28,6 +28,28 @@ varying vec3 vOrigin;
 varying vec3 vDirection;
 varying vec3 vModelPosition;
 
+vec3 applyEdgeHighlight(vec3 color, vec3 realPosition, vec3 normal) {
+    if (uEnableEdgeHighlight < 0.5) return color;
+    float distanceFromCamera = length(vOrigin - realPosition);
+    if (distanceFromCamera >= uEdgeFadeEnd) return color;
+
+    vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
+    vec3 hOdd = 0.5 * mod(uVoxelShape, 2.0);
+    vec3 fractPos = fract(objPos + hOdd);
+    vec3 distToEdge = min(fractPos, 1.0 - fractPos);
+
+    vec3 absN = abs(normal);
+    vec2 edgeDists = absN.x > 0.5 ? distToEdge.yz :
+                     absN.y > 0.5 ? distToEdge.xz : distToEdge.xy;
+
+    if (!any(lessThan(edgeDists, vec2(uEdgeThickness)))) return color;
+
+    float fade = (uEdgeFadeEnd > uEdgeFadeStart)
+        ? 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera)
+        : 1.0;
+    return mix(color, uEdgeColor, uEdgeIntensity * fade);
+}
+
 vec4 sampleVoxel(vec3 objCenter) {
     // objCenter はオブジェクト座標（セル中心）。例: position + 0.5
     // [-N/2, N/2) → [0, N) の整数添字へ
@@ -40,17 +62,9 @@ vec4 sampleVoxel(vec3 objCenter) {
     }
 
     // テクセル中心で R8 インデックスを取得 → パレット参照
+    // Visibility はパレットテクスチャの α 値にエンコード済み
     vec3 texel01 = (idx + 0.5) / uVoxelShape;
     float index = texture(uTexture, texel01).r * 255.0;
-    int voxelValue = int(index);
-    
-    // ボクセル値の表示制御チェック（0-15すべて配列で統一）
-    if (voxelValue >= 0 && voxelValue < 16) {
-        if (uValueVisibility[voxelValue] < 0.5) {
-            return vec4(0.0);
-        }
-    }
-    
     float u = (index + 0.5) / uPaletteSize;
     return texture(uPaletteTexture, vec2(u, 0.5));
 }
@@ -181,78 +195,82 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         float diff = max(dot(n, lightDir), 0.0);
 
         float lighting = uAmbientIntensity + uLightIntensity * diff;
-        vec3 finalColor = voxel.rgb * lighting;
-
-        if (uEnableEdgeHighlight > 0.5) {
-            float distanceFromCamera = length(vOrigin - realPosition);
-            if (distanceFromCamera < uEdgeFadeEnd) {
-                // オブジェクト空間に変換してhalfOddを適用
-                vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
-                vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
-                vec3 adjustedPos = objPos + halfOdd;
-                vec3 fractPos = fract(adjustedPos);
-                vec3 distToEdge = min(fractPos, 1.0 - fractPos);
-                bool isEdge = false;
-                if (abs(n.x) > 0.5) {
-                    isEdge = (distToEdge.y < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-                } else if (abs(n.y) > 0.5) {
-                    isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-                } else {
-                    isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.y < uEdgeThickness);
-                }
-                if (isEdge) {
-                    float fade = 1.0;
-                    if (uEdgeFadeEnd > uEdgeFadeStart) {
-                        fade = 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera);
-                    }
-                    finalColor = mix(finalColor, uEdgeColor, uEdgeIntensity * fade);
-                }
-            }
-        }
+        vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, n);
         return vec4(finalColor, voxel.a);
     }
 
-    // ステップ数制御はそのまま
-    float near = 50.0, far = 500.0;
-    float distanceFactor = smoothstep(near, far, uCameraDistance);
-    int baseMaxSteps = int(min(length(uVoxelShape) * 2.0, 800.0));
-    int maxSteps = int(mix(float(baseMaxSteps), float(baseMaxSteps) * 0.25, distanceFactor));
+    // ステップ数上限（Occupancy Gridによるスキップで実効ステップ数は大幅に減少）
+    int maxSteps = int(min(length(uVoxelShape) * 2.0, 2000.0));
+    bool useOccupancy = (uOccupancyDimensions.x > 0.0);
 
     bool  hit = false;
     vec3  hitNormal = vec3(0.0);
     float hitDistance = 0.0;
     vec4  voxel = vec4(0.0);
 
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 2000; ++i) {
         if (i >= maxSteps) break;
 
-        // 最小のtMax軸を決定（元の方式）
-        int axis;
-        if (tMax.x <= tMax.y) {
-            axis = (tMax.x <= tMax.z) ? 0 : 2;
-        } else {
-            axis = (tMax.y <= tMax.z) ? 1 : 2;
-        }
+        // ブランチレスDDAステップ: 最小tMax軸を選択
+        vec3 cmp = step(tMax.xyz, tMax.yzx) * step(tMax.xyz, tMax.zxy);
+        // タイブレーキング: x > y > z の優先度で1つだけ選択
+        cmp.y *= 1.0 - cmp.x;
+        cmp.z *= 1.0 - max(cmp.x, cmp.y);
+        // 数値的安全策: 1つも選ばれなければxを選択
+        if (dot(cmp, cmp) < 0.5) cmp.x = 1.0;
 
-        // 一歩進む
-        if      (axis == 0) { position.x += stepVec.x; hitDistance = tMax.x; tMax.x += tDelta.x; hitNormal = vec3(-stepVec.x, 0.0, 0.0); }
-        else if (axis == 1) { position.y += stepVec.y; hitDistance = tMax.y; tMax.y += tDelta.y; hitNormal = vec3(0.0, -stepVec.y, 0.0); }
-        else                { position.z += stepVec.z; hitDistance = tMax.z; tMax.z += tDelta.z; hitNormal = vec3(0.0, 0.0, -stepVec.z); }
+        position += stepVec * cmp;
+        hitDistance = dot(tMax, cmp);
+        tMax += tDelta * cmp;
+        hitNormal = -stepVec * cmp;
 
         // AABB境界チェック
         if (hitDistance > tExit) break;
-        
-        // 次のセルをサンプリング（常に中心）
+
+        // Occupancy Gridによる空ブロックスキップ
+        if (useOccupancy) {
+            vec3 sp = position + vec3(0.5);
+            vec3 vidx = floor(sp + 0.5 * uVoxelShape);
+            vec3 bidx = floor(vidx / uBlockSize);
+
+            // ブロック範囲外チェック
+            if (any(lessThan(bidx, vec3(0.0))) ||
+                any(greaterThanEqual(bidx, uOccupancyDimensions))) {
+                prevOccupied = false;
+                continue;
+            }
+
+            vec3 tc = (bidx + 0.5) / uOccupancyDimensions;
+            if (texture(uOccupancyTexture, tc).r < 0.5) {
+                // 空ブロック: ブロック出口までレイを一気にスキップ
+                vec3 farEdge = (bidx + step(vec3(0.0), stepVec)) * uBlockSize
+                             - 0.5 * uVoxelShape;
+                vec3 tBlockFar = (farEdge - origin) * invDir;
+                float tSkip = min(min(tBlockFar.x, tBlockFar.y), tBlockFar.z);
+
+                if (tSkip > tExit) break;
+
+                // スキップ先でDDA状態を再初期化
+                vec3 pNew = origin + (tSkip + 1e-4) * direction;
+                position = floor(pNew + halfOdd + sgn * 1e-4) - halfOdd;
+                vec3 nb = position + step(vec3(0.0), stepVec);
+                tMax = (nb - origin) * invDir;
+                prevOccupied = false;
+                continue;
+            }
+        }
+
+        // ボクセルサンプリング（占有ブロック内のみ実行）
         samplePos = position + vec3(0.5);
         voxel = sampleVoxel(samplePos);
         bool currentOccupied = (voxel.a > 0.0);
-        
-        // 空→実体境界の検出（元の方式：シンプルな境界検出のみ）
+
+        // 空→実体境界の検出
         if (!prevOccupied && currentOccupied) {
             hit = true;
             break;
         }
-        
+
         prevOccupied = currentOccupied;
     }
     
@@ -277,35 +295,7 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             vec3 lightDir = normalize(vOrigin - realPosition);
             float diff = max(dot(n, lightDir), 0.0);
             float lighting = uAmbientIntensity + uLightIntensity * diff;
-            vec3 finalColor = voxel.rgb * lighting;
-            
-            // エッジ強調処理
-            if (uEnableEdgeHighlight > 0.5) {
-                float distanceFromCamera = length(vOrigin - realPosition);
-                if (distanceFromCamera < uEdgeFadeEnd) {
-                    // オブジェクト空間に変換してhalfOddを適用
-                    vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
-                    vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
-                    vec3 adjustedPos = objPos + halfOdd;
-                    vec3 fractPos2 = fract(adjustedPos);
-                    vec3 distToEdge = min(fractPos2, 1.0 - fractPos2);
-                    bool isEdge = false;
-                    if (abs(n.x) > 0.5) {
-                        isEdge = (distToEdge.y < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-                    } else if (abs(n.y) > 0.5) {
-                        isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-                    } else {
-                        isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.y < uEdgeThickness);
-                    }
-                    if (isEdge) {
-                        float fade = 1.0;
-                        if (uEdgeFadeEnd > uEdgeFadeStart) {
-                            fade = 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera);
-                        }
-                        finalColor = mix(finalColor, uEdgeColor, uEdgeIntensity * fade);
-                    }
-                }
-            }
+            vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, n);
             return vec4(finalColor, voxel.a);
         }
 
@@ -320,43 +310,7 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 
     // ライティング計算：環境光 + 拡散光
     float lighting = uAmbientIntensity + uLightIntensity * diff;
-    vec3 finalColor = voxel.rgb * lighting;
-    
-    // エッジ強調処理
-    if (uEnableEdgeHighlight > 0.5) {
-        float distanceFromCamera = length(vOrigin - realPosition);
-        if (distanceFromCamera < uEdgeFadeEnd) {
-            // オブジェクト空間に変換してhalfOddを適用
-            vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
-            vec3 halfOdd = 0.5 * mod(uVoxelShape, 2.0);
-            vec3 adjustedPos = objPos + halfOdd;
-            vec3 fractPos3 = fract(adjustedPos);
-            vec3 distToEdge = min(fractPos3, 1.0 - fractPos3);
-
-            // 面法線の軸を特定
-            bool isEdge = false;
-            if (abs(hitNormal.x) > 0.5) {
-                // X面なので YZ のみで判定
-                isEdge = (distToEdge.y < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-            } else if (abs(hitNormal.y) > 0.5) {
-                // Y面なので XZ のみで判定
-                isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.z < uEdgeThickness);
-            } else {
-                // Z面なので XY のみで判定
-                isEdge = (distToEdge.x < uEdgeThickness) || (distToEdge.y < uEdgeThickness);
-            }
-
-            if (isEdge) {
-                // 距離に応じて強度をフェード
-                float fade = 1.0;
-                if (uEdgeFadeEnd > uEdgeFadeStart) {
-                    fade = 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera);
-                }
-                finalColor = mix(finalColor, uEdgeColor, uEdgeIntensity * fade);
-            }
-        }
-    }
-
+    vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, hitNormal);
     return vec4(finalColor, voxel.a);
 }
 

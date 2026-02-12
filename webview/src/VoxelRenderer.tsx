@@ -45,8 +45,8 @@ const VoxelShaderMaterial = shaderMaterial(
     uEnableClipping: 0.0,
     uIsOrthographic: 0.0,
     uCameraDistance: 0.0,
-    uEnableEdgeHighlight: 0.0,
-    uEdgeThickness: 0.05,
+    uEnableEdgeHighlight: 1.0,
+    uEdgeThickness: 0.03,
     uEdgeColor: new THREE.Color('#ffffff'),
     uEdgeIntensity: 1.0,
     uEdgeFadeStart: 0,
@@ -351,18 +351,6 @@ function VoxelMesh(props: VoxelMeshProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const { camera } = useThree();
-  const [cameraDistance, setCameraDistance] = useState<number>(0);
-
-  // デバッグログ
-  useEffect(() => {
-    console.log('VoxelMesh rendering with:', {
-      dimensions: voxelData.dimensions,
-      voxelLength: voxelData.voxelLength,
-      alpha,
-      lightIntensity,
-      ambientIntensity,
-    });
-  }, [voxelData, alpha, lightIntensity, ambientIntensity]);
 
   // 3Dテクスチャ作成
   const dataTexture = useMemo(() => {
@@ -382,6 +370,53 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [voxelData]);
 
+  // Occupancy Grid テクスチャ作成（空間スキップ用）
+  const occupancyData = useMemo(() => {
+    const { dimensions, values } = voxelData;
+    const blockSize = 8;
+    const occX = Math.ceil(dimensions.x / blockSize);
+    const occY = Math.ceil(dimensions.y / blockSize);
+    const occZ = Math.ceil(dimensions.z / blockSize);
+    const occData = new Uint8Array(occX * occY * occZ);
+    const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
+
+    for (let bx = 0; bx < occX; bx++) {
+      const xStart = bx * blockSize;
+      const xEnd = Math.min(xStart + blockSize, dimensions.x);
+      for (let by = 0; by < occY; by++) {
+        const yStart = by * blockSize;
+        const yEnd = Math.min(yStart + blockSize, dimensions.y);
+        for (let bz = 0; bz < occZ; bz++) {
+          const zStart = bz * blockSize;
+          const zEnd = Math.min(zStart + blockSize, dimensions.z);
+          let occupied = false;
+          for (let x = xStart; x < xEnd && !occupied; x++) {
+            for (let y = yStart; y < yEnd && !occupied; y++) {
+              const rowBase = (x * dimensions.y + y) * dimensions.z;
+              for (let z = zStart; z < zEnd; z++) {
+                if (uint8Array[rowBase + z] !== 0) {
+                  occupied = true;
+                  break;
+                }
+              }
+            }
+          }
+          occData[bx + occX * (by + occY * bz)] = occupied ? 255 : 0;
+        }
+      }
+    }
+
+    const texture = new THREE.Data3DTexture(occData, occX, occY, occZ);
+    texture.format = THREE.RedFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.unpackAlignment = 1;
+    texture.needsUpdate = true;
+
+    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ) };
+  }, [voxelData]);
+
   // パレットテクスチャ作成（カスタム色対応）
   const paletteTexture = useMemo(() => {
     const paletteSize = 16;
@@ -393,7 +428,8 @@ function VoxelMesh(props: VoxelMeshProps) {
       data[i * 4 + 0] = Math.floor(color.r * 255);
       data[i * 4 + 1] = Math.floor(color.g * 255);
       data[i * 4 + 2] = Math.floor(color.b * 255);
-      data[i * 4 + 3] = i === 0 ? (valueVisibility[0] ? 255 : 0) : 255; // 0番の透明度制御
+      // Visibility をパレットの α 値にエンコード（シェーダー側の配列参照を不要に）
+      data[i * 4 + 3] = valueVisibility[i] ? 255 : 0;
     }
 
     const texture = new THREE.DataTexture(
@@ -410,7 +446,24 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [customColors, valueVisibility]);
 
-  // VoxelShaderMaterialは既にグローバルで定義されているので削除
+  // テクスチャの破棄（GPUメモリリーク防止）
+  useEffect(() => {
+    return () => {
+      dataTexture.dispose();
+    };
+  }, [dataTexture]);
+
+  useEffect(() => {
+    return () => {
+      occupancyData.texture.dispose();
+    };
+  }, [occupancyData]);
+
+  useEffect(() => {
+    return () => {
+      paletteTexture.dispose();
+    };
+  }, [paletteTexture]);
 
   // 初期化: voxelDataとテクスチャをuniformsに設定
   useEffect(() => {
@@ -422,21 +475,14 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uTexture.value = dataTexture;
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-  }, [voxelData, dataTexture, paletteTexture]);
+    u.uOccupancyTexture.value = occupancyData.texture;
+    u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
+    u.uBlockSize.value = 8;
+  }, [voxelData, dataTexture, paletteTexture, occupancyData]);
 
   // Levaコントロールの値が変更されたときにuniformsを直接更新
   useEffect(() => {
-    if (!materialRef.current) {
-      console.warn('⚠️ materialRef.current is null, uniforms not updated');
-      return;
-    }
-
-    console.log('🔄 Updating shader uniforms:', {
-      alpha,
-      lightIntensity,
-      ambientIntensity,
-      hasUniforms: !!materialRef.current.uniforms,
-    });
+    if (!materialRef.current) return;
 
     const u = materialRef.current.uniforms;
 
@@ -467,8 +513,6 @@ function VoxelMesh(props: VoxelMeshProps) {
     // パレットテクスチャを更新
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-
-    console.log('✅ Uniforms updated successfully, uAlpha.value:', u.uAlpha.value);
   }, [
     alpha,
     lightIntensity,
@@ -502,7 +546,6 @@ function VoxelMesh(props: VoxelMeshProps) {
       if (camera) {
         const distance = camera.position.distanceTo(meshRef.current.position);
         materialRef.current.uniforms.uCameraDistance.value = distance;
-        setCameraDistance(distance);
       }
     }
   });
@@ -542,15 +585,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     }));
 
     // デバッグログ
-    useEffect(() => {
-      console.log('VoxelRenderer received data:', {
-        dimensions: voxelData.dimensions,
-        voxelLength: voxelData.voxelLength,
-        valuesLength: voxelData.values.length,
-        settings,
-      });
-    }, [voxelData, settings]);
-
     // ボクセル値表示制御の状態（0は初期値非表示）
     const [valueVisibility, setValueVisibility] = useState<boolean[]>(
       Array(16)
@@ -570,8 +604,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       alpha: 1.0,
       lightIntensity: 0.8,
       ambientIntensity: 0.4,
-      enableEdgeHighlight: false,
-      edgeThickness: 0.05,
+      enableEdgeHighlight: true,
+      edgeThickness: 0.03,
       edgeColor: '#ffffff',
       edgeIntensity: 0.8,
       edgeMaxDistance: 200,
@@ -597,7 +631,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     }, []);
 
     const updateCustomColor = useCallback((index: number, value: string) => {
-      console.log(`Color updated: index=${index}, value=${value}`);
       setCustomColors((prev) => {
         const newColors = [...prev];
         newColors[index] = value;
@@ -949,29 +982,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       const zoom = Math.min(width, height) / (maxDim * 1.4);
       orthoInitialZoomRef.current = Math.max(0.1, zoom);
     }, [voxelData.dimensions, width, height]);
-
-    // デバッグ: コントロール値確認
-    useEffect(() => {
-      console.log('Controls:', {
-        fov,
-        far,
-        alpha,
-        dpr,
-        lightIntensity,
-        ambientIntensity,
-        enableEdgeHighlight,
-        clippingEnabled: clippingPlane.enabled,
-      });
-    }, [
-      fov,
-      far,
-      alpha,
-      dpr,
-      lightIntensity,
-      ambientIntensity,
-      enableEdgeHighlight,
-      clippingPlane.enabled,
-    ]);
 
     // DPR変化の監視
     useEffect(() => {
