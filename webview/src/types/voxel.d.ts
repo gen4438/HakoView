@@ -42,6 +42,7 @@ export interface ViewerSettings {
     normal: [number, number, number];
     distance: number;
   };
+  colormap?: Record<string, string>;
 }
 
 /**
@@ -91,6 +92,7 @@ export interface VSCodeAPI {
 export type ExtensionMessage =
   | { type: 'loadVoxelData'; data: VoxelDataMessage }
   | { type: 'updateVoxelData'; data: VoxelDataMessage }
+  | { type: 'updateSettings'; settings: ViewerSettings }
   | { type: 'clearViewer' }
   | { type: 'restoreState'; state: ViewerState }
   | { type: 'showError'; message: string };

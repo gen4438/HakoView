@@ -5,7 +5,7 @@ import { LoadingState } from './components/LoadingState';
 import { VoxelRenderer } from './VoxelRenderer';
 
 export const VoxelViewer: React.FC = () => {
-  const { voxelData, error, isLoading, loadFile, loadFileFromPath, reportError } =
+  const { voxelData, settings, error, isLoading, loadFile, loadFileFromPath, reportError } =
     useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -64,16 +64,12 @@ export const VoxelViewer: React.FC = () => {
     [loadFile, loadFileFromPath, reportError]
   );
 
-  if (isLoading) {
-    return <LoadingState />;
-  }
-
   if (error) {
     return <ErrorDisplay message={error} />;
   }
 
   // ドラッグオーバー時のオーバーレイ
-  const dropOverlay = isDragOver && (
+  const dropOverlay = (isDragOver || isLoading) && (
     <div
       style={{
         position: 'absolute',
@@ -85,33 +81,43 @@ export const VoxelViewer: React.FC = () => {
         justifyContent: 'center',
         background: 'rgba(0, 0, 0, 0.7)',
         backdropFilter: 'blur(4px)',
-        border: '3px dashed var(--vscode-focusBorder)',
+        border: isDragOver ? '3px dashed var(--vscode-focusBorder)' : 'none',
         borderRadius: '12px',
-        pointerEvents: 'none',
+        pointerEvents: isDragOver ? 'none' : 'auto',
       }}
     >
-      <div
-        style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--vscode-editor-foreground)' }}
-      >
-        Drop .leS file here
-      </div>
-      <div
-        style={{
-          fontSize: '18px',
-          marginTop: '12px',
-          padding: '8px 20px',
-          background: 'var(--vscode-badge-background)',
-          color: 'var(--vscode-badge-foreground)',
-          borderRadius: '6px',
-          fontWeight: 'bold',
-        }}
-      >
-        Shift + Drag to load in this tab
-      </div>
+      {isLoading ? (
+        <LoadingState />
+      ) : (
+        <>
+          <div
+            style={{
+              fontSize: '28px',
+              fontWeight: 'bold',
+              color: 'var(--vscode-editor-foreground)',
+            }}
+          >
+            Drop .leS file here
+          </div>
+          <div
+            style={{
+              fontSize: '18px',
+              marginTop: '12px',
+              padding: '8px 20px',
+              background: 'var(--vscode-badge-background)',
+              color: 'var(--vscode-badge-foreground)',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+            }}
+          >
+            Shift + Drag to load in this tab
+          </div>
+        </>
+      )}
     </div>
   );
 
-  if (!voxelData) {
+  if (!voxelData && !isLoading) {
     return (
       <div
         className="loading"
@@ -128,7 +134,7 @@ export const VoxelViewer: React.FC = () => {
           padding: '24px',
         }}
       >
-        {dropOverlay}
+        {isDragOver && dropOverlay}
         <div style={{ fontSize: '16px' }}>No voxel data loaded.</div>
         <div
           style={{
@@ -160,7 +166,7 @@ export const VoxelViewer: React.FC = () => {
       }}
     >
       {dropOverlay}
-      <VoxelRenderer voxelData={voxelData} />
+      {voxelData && <VoxelRenderer voxelData={voxelData} settings={settings} />}
     </div>
   );
 };

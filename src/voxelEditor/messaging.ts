@@ -7,9 +7,17 @@ import { VoxelDataset } from '../voxelParser/VoxelData';
 export type ExtensionToWebviewMessage =
   | { type: 'loadVoxelData'; data: VoxelDataMessage }
   | { type: 'updateVoxelData'; data: VoxelDataMessage }
+  | { type: 'updateSettings'; settings: ViewerSettings }
   | { type: 'clearViewer' }
   | { type: 'restoreState'; state: ViewerState }
   | { type: 'showError'; message: string };
+
+/**
+ * ビューアーの設定
+ */
+export interface ViewerSettings {
+  colormap?: Record<string, string>;
+}
 
 /**
  * Webview→Extensionメッセージ型
