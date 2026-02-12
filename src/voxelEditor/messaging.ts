@@ -17,9 +17,11 @@ export type ExtensionToWebviewMessage =
 export type WebviewToExtensionMessage =
   | { command: 'ready' }
   | { command: 'loadFile'; fileName: string; data: number[] }
+  | { command: 'loadFileFromPath'; filePath: string }
   | { command: 'saveState'; state: ViewerState }
   | { command: 'showError'; message: string }
-  | { command: 'openAsText' };
+  | { command: 'openAsText' }
+  | { command: 'reportMetrics'; metrics: RenderingMetrics };
 
 /**
  * ボクセルデータメッセージ（postMessage用にUint8Array→Array変換）
@@ -45,6 +47,22 @@ export interface ViewerState {
   clippingPlane?: {
     normal: [number, number, number];
     distance: number;
+  };
+}
+
+export interface RenderingMetrics {
+  loadMetrics: {
+    parseTime: number;
+    textureUploadTime: number;
+  };
+  renderMetrics: {
+    timeToFirstFrame: number;
+    averageFps: number;
+    frameTime: number;
+  };
+  resourceMetrics: {
+    cpuMemoryMB: number;
+    textureMemoryMB: number;
   };
 }
 

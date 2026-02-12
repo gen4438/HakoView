@@ -59,6 +59,7 @@ pnpm init
 ```
 
 **webview/package.json**:
+
 ```json
 {
   "name": "hakoview-webview",
@@ -102,6 +103,7 @@ cd ..
 ### 2.1 VoxelDataモデルの実装
 
 **`src/voxelParser/VoxelData.ts`**:
+
 ```typescript
 export interface Dimensions {
   x: number;
@@ -119,6 +121,7 @@ export interface VoxelDataset {
 ```
 
 **実装チェックリスト**:
+
 - [ ] Dimensions インターフェース定義
 - [ ] VoxelDataset インターフェース定義
 - [ ] getVoxelIndex ヘルパー関数
@@ -127,34 +130,42 @@ export interface VoxelDataset {
 ### 2.2 .leSパーサーの実装
 
 **`src/voxelParser/LesParser.ts`**:
+
 ```typescript
 export class LesParser {
   static parse(content: Uint8Array): VoxelDataset {
     // 1. テキストデコード
     const text = new TextDecoder().decode(content);
-    
+
     // 2. ヘッダパース
     const lines = text.split('\n');
     const header = this.parseHeader(lines[0]);
-    
+
     // 3. データパース
     const values = this.parseData(lines.slice(1), header);
-    
+
     // 4. バリデーション
     this.validate(header, values);
-    
+
     return { ...header, values };
   }
-  
-  private static parseHeader(line: string): HeaderInfo { /* ... */ }
-  private static parseData(lines: string[], header: HeaderInfo): Uint8Array { /* ... */ }
-  private static validate(header: HeaderInfo, values: Uint8Array): void { /* ... */ }
+
+  private static parseHeader(line: string): HeaderInfo {
+    /* ... */
+  }
+  private static parseData(lines: string[], header: HeaderInfo): Uint8Array {
+    /* ... */
+  }
+  private static validate(header: HeaderInfo, values: Uint8Array): void {
+    /* ... */
+  }
 }
 ```
 
 **実装チェックリスト**:
+
 - [ ] ヘッダパース（X Y Z [voxelLength]）
-- [ ] データパース（X*Y行、各Z値）
+- [ ] データパース（X\*Y行、各Z値）
 - [ ] バリデーション（FR-005, FR-008, FR-011）
 - [ ] エラーハンドリング（ParseError定義）
 - [ ] ユニットテスト（`src/test/voxelParser/LesParser.test.ts`）
@@ -162,15 +173,14 @@ export class LesParser {
 ### 2.3 CustomEditorProviderの実装
 
 **`src/voxelEditor/VoxelEditorProvider.ts`**:
+
 ```typescript
 export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDocument> {
   public static register(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new VoxelEditorProvider(context);
-    return vscode.window.registerCustomEditorProvider(
-      'hakoview.lesViewer',
-      provider,
-      { webviewOptions: { retainContextWhenHidden: true } }
-    );
+    return vscode.window.registerCustomEditorProvider('hakoview.lesViewer', provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    });
   }
 
   async openCustomDocument(
@@ -191,10 +201,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
     // Webviewセットアップ
     webviewPanel.webview.options = { enableScripts: true };
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
-    
+
     // メッセージハンドリング
     this.setupMessageHandling(document, webviewPanel);
-    
+
     // 初期データ送信
     this.sendVoxelData(document, webviewPanel);
   }
@@ -202,6 +212,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 ```
 
 **実装チェックリスト**:
+
 - [ ] CustomEditorProvider実装
 - [ ] VoxelDocument実装（CustomDocument）
 - [ ] openCustomDocument（ファイル読み込み）
@@ -213,6 +224,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 ### 2.4 package.json設定
 
 **`package.json`の更新**:
+
 ```json
 {
   "contributes": {
@@ -265,6 +277,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 ### 3.1 React + Three.js基盤
 
 **`webview/src/index.tsx`**:
+
 ```tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -275,6 +288,7 @@ root.render(<VoxelViewer />);
 ```
 
 **`webview/src/VoxelViewer.tsx`**:
+
 ```tsx
 import React, { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
@@ -284,15 +298,15 @@ import { useExtensionMessage } from './hooks/useExtensionMessage';
 
 export const VoxelViewer: React.FC = () => {
   const { voxelData, sendMessage } = useExtensionMessage();
-  
+
   useEffect(() => {
     sendMessage({ command: 'ready' });
   }, []);
-  
+
   if (!voxelData) {
     return <div>Drop .leS file here</div>;
   }
-  
+
   return (
     <Canvas>
       <OrbitControls />
@@ -304,6 +318,7 @@ export const VoxelViewer: React.FC = () => {
 ```
 
 **実装チェックリスト**:
+
 - [ ] React + ReactDOM セットアップ
 - [ ] Canvas（@react-three/fiber）
 - [ ] OrbitControls
@@ -319,10 +334,8 @@ tmpフォルダの既存実装を移植・整理。
 // tmp/VoxelRenderer.tsx から移植
 export const VoxelRenderer: React.FC<{ data: VoxelDataset }> = ({ data }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const { dataTexture, paletteTexture } = useMemo(() => 
-    createTextures(data), [data]
-  );
-  
+  const { dataTexture, paletteTexture } = useMemo(() => createTextures(data), [data]);
+
   return (
     <mesh ref={meshRef}>
       <boxGeometry args={[data.dimensions.x, data.dimensions.y, data.dimensions.z]} />
@@ -337,6 +350,7 @@ export const VoxelRenderer: React.FC<{ data: VoxelDataset }> = ({ data }) => {
 ```
 
 **実装チェックリスト**:
+
 - [ ] VoxelRenderer コンポーネント
 - [ ] Data3DTexture 生成
 - [ ] PaletteTexture 生成
@@ -347,6 +361,7 @@ export const VoxelRenderer: React.FC<{ data: VoxelDataset }> = ({ data }) => {
 ### 3.3 シェーダー移植
 
 **`webview/src/shaders/voxel.vert`**:
+
 ```glsl
 // tmp/voxel.vert から移植
 precision highp float;
@@ -370,6 +385,7 @@ void main() {
 ```
 
 **`webview/src/shaders/voxel.frag`**:
+
 ```glsl
 // tmp/voxel.frag から移植（簡略版）
 precision highp float;
@@ -389,6 +405,7 @@ void main() {
 ```
 
 **実装チェックリスト**:
+
 - [ ] voxel.vert 移植
 - [ ] voxel.frag 移植（基本版）
 - [ ] シェーダーマテリアル定義（shaderMaterial from drei）
@@ -398,27 +415,28 @@ void main() {
 ### 3.4 Webview HTML生成
 
 **Extension側（`src/voxelEditor/VoxelEditorProvider.ts`）**:
+
 ```typescript
 private getHtmlForWebview(webview: vscode.Webview): string {
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'webview.js')
   );
-  
+
   const styleUri = webview.asWebviewUri(
     vscode.Uri.joinPath(this.context.extensionUri, 'webview', 'dist', 'webview.css')
   );
-  
+
   const nonce = getNonce();
-  
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" 
-          content="default-src 'none'; 
-                   script-src ${webview.cspSource}; 
-                   style-src ${webview.cspSource} 'unsafe-inline'; 
-                   img-src ${webview.cspSource} data:; 
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'none';
+                   script-src ${webview.cspSource};
+                   style-src ${webview.cspSource} 'unsafe-inline';
+                   img-src ${webview.cspSource} data:;
                    worker-src blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="${styleUri}" rel="stylesheet">
@@ -439,6 +457,7 @@ private getHtmlForWebview(webview: vscode.Webview): string {
 ### 4.1 esbuild設定（Webview用）
 
 **`esbuild.webview.js`**:
+
 ```javascript
 const esbuild = require('esbuild');
 
@@ -481,6 +500,7 @@ main().catch((e) => {
 ### 4.2 tsconfig（Webview用）
 
 **`webview/tsconfig.json`**:
+
 ```json
 {
   "extends": "../tsconfig.json",
@@ -496,6 +516,7 @@ main().catch((e) => {
 ### 4.3 package.jsonスクリプト更新
 
 **ルート `package.json`**:
+
 ```json
 {
   "scripts": {
@@ -515,6 +536,7 @@ main().catch((e) => {
 ### 5.1 ユニットテスト
 
 **`src/test/voxelParser/LesParser.test.ts`**:
+
 ```typescript
 import * as assert from 'assert';
 import { LesParser } from '../../voxelParser/LesParser';
@@ -522,26 +544,26 @@ import { LesParser } from '../../voxelParser/LesParser';
 suite('LesParser Test Suite', () => {
   test('Parse valid .leS file', () => {
     const content = new TextEncoder().encode(
-      "2 3 4 1.0e-9\n" +
-      "1 0 0 0\n" +
-      "0 0 0 0\n" +
-      "0 0 0 0\n" +
-      "0 0 10 0\n" +
-      "0 0 0 0\n" +
-      "0 0 0 0\n"
+      '2 3 4 1.0e-9\n' +
+        '1 0 0 0\n' +
+        '0 0 0 0\n' +
+        '0 0 0 0\n' +
+        '0 0 10 0\n' +
+        '0 0 0 0\n' +
+        '0 0 0 0\n'
     );
-    
+
     const dataset = LesParser.parse(content);
-    
+
     assert.strictEqual(dataset.dimensions.x, 2);
     assert.strictEqual(dataset.dimensions.y, 3);
     assert.strictEqual(dataset.dimensions.z, 4);
     assert.strictEqual(dataset.values.length, 24);
     assert.strictEqual(dataset.values[0], 1);
   });
-  
+
   test('Reject oversized voxel grid', () => {
-    const content = new TextEncoder().encode("1001 1001 1001 1.0e-9\n...");
+    const content = new TextEncoder().encode('1001 1001 1001 1.0e-9\n...');
     assert.throws(() => LesParser.parse(content), /exceeds limit/);
   });
 });
@@ -550,6 +572,7 @@ suite('LesParser Test Suite', () => {
 ### 5.2 統合テスト
 
 **`src/test/integration/voxelEditor.test.ts`**:
+
 ```typescript
 import * as vscode from 'vscode';
 import * as assert from 'assert';
@@ -558,7 +581,7 @@ suite('Voxel Editor Integration Test', () => {
   test('Open .leS file in custom editor', async () => {
     const uri = vscode.Uri.file('/path/to/test.leS');
     await vscode.commands.executeCommand('vscode.openWith', uri, 'hakoview.lesViewer');
-    
+
     // CustomEditorが開いていることを確認
     // （実際のアサーション実装は複雑）
   });
@@ -597,6 +620,7 @@ pnpm run test
 ## チェックリスト全体
 
 ### Extension側
+
 - [ ] VoxelData モデル定義
 - [ ] LesParser 実装
 - [ ] CustomEditorProvider 実装
@@ -608,6 +632,7 @@ pnpm run test
 - [ ] 統合テスト
 
 ### Webview側
+
 - [ ] React + ReactDOM セットアップ
 - [ ] VoxelViewer コンポーネント
 - [ ] VoxelRenderer コンポーネント
@@ -620,6 +645,7 @@ pnpm run test
 - [ ] ビルド設定
 
 ### ビルド・環境
+
 - [ ] esbuild.webview.js 作成
 - [ ] webview/tsconfig.json 作成
 - [ ] package.jsonスクリプト更新
@@ -627,6 +653,7 @@ pnpm run test
 - [ ] .gitignore更新（webview/dist/追加）
 
 ### ドキュメント
+
 - [ ] README.md更新（使い方の説明）
 - [ ] CHANGELOG.md更新
 - [ ] 日本語ドキュメント整備
@@ -666,22 +693,38 @@ pnpm run test
 ## トラブルシューティング
 
 ### WebGL2が使えない
+
 → VS Code 1.60以降を使用していることを確認
 
 ### シェーダーがロードできない
+
 → CSP設定を確認、シェーダーをインライン埋め込みに変更
 
 ### Three.jsのバンドルサイズが大きい
+
 → Tree shakingが効いていることを確認（named import使用）
 
 ### Webviewが真っ白
+
 → ブラウザのコンソールでエラーを確認、CSP違反がないかチェック
+
+---
+
+## 検証チェックリスト
+
+- [ ] .leSをファイルツリーから開いて描画される
+- [ ] テキストエディタから「Open in Voxel Viewer」で切り替えられる
+- [ ] コマンドパレットから空のビューアーを開ける
+- [ ] 空のビューアーにD&Dで .leS を読み込める
+- [ ] パースエラー時にエラーメッセージが表示される
+- [ ] 200^3 で初回描画が5秒以内（目安）
 
 ---
 
 ## 次のステップ
 
 Phase 1完了後：
+
 - **Phase 2**: 階層的最適化（Occupancy Texture）
 - **Phase 3**: プログレッシブレンダリング
 - **Phase 4**: 編集機能（ボクセル値変更）

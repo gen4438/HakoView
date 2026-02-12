@@ -5,6 +5,7 @@ webview/node_modules/
 # ビルド出力
 dist/
 out/
+build/
 *.vsix
 
 # 設定ファイル

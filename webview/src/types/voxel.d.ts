@@ -60,6 +60,22 @@ export interface ViewerState {
   };
 }
 
+export interface RenderingMetrics {
+  loadMetrics: {
+    parseTime: number;
+    textureUploadTime: number;
+  };
+  renderMetrics: {
+    timeToFirstFrame: number;
+    averageFps: number;
+    frameTime: number;
+  };
+  resourceMetrics: {
+    cpuMemoryMB: number;
+    textureMemoryMB: number;
+  };
+}
+
 /**
  * VS Code API型定義（acquireVsCodeApi()の戻り値）
  */
@@ -85,6 +101,8 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { command: 'ready' }
   | { command: 'loadFile'; fileName: string; data: number[] }
+  | { command: 'loadFileFromPath'; filePath: string }
   | { command: 'saveState'; state: ViewerState }
   | { command: 'showError'; message: string }
-  | { command: 'openAsText' };
+  | { command: 'openAsText' }
+  | { command: 'reportMetrics'; metrics: RenderingMetrics };

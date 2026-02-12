@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   ExtensionMessage,
   WebviewMessage,
+  RenderingMetrics,
   VoxelDataMessage,
   ViewerState,
   VSCodeAPI,
@@ -18,6 +19,7 @@ export function useExtensionMessage() {
   const [voxelData, setVoxelData] = useState<VoxelDataMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const loadStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     // Extensionからのメッセージハンドラー
@@ -27,21 +29,22 @@ export function useExtensionMessage() {
       switch (message.type) {
         case 'loadVoxelData':
           setIsLoading(true);
+          loadStartRef.current = performance.now();
           setVoxelData(message.data);
           setError(null);
-          setIsLoading(false);
           break;
 
         case 'updateVoxelData':
           setIsLoading(true);
+          loadStartRef.current = performance.now();
           setVoxelData(message.data);
           setError(null);
-          setIsLoading(false);
           break;
 
         case 'clearViewer':
           setVoxelData(null);
           setError(null);
+          setIsLoading(false);
           break;
 
         case 'restoreState':
@@ -66,6 +69,36 @@ export function useExtensionMessage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!voxelData || loadStartRef.current === null) {
+      return;
+    }
+
+    const start = loadStartRef.current;
+    requestAnimationFrame(() => {
+      const timeToFirstFrame = performance.now() - start;
+      const metrics: RenderingMetrics = {
+        loadMetrics: {
+          parseTime: 0,
+          textureUploadTime: 0,
+        },
+        renderMetrics: {
+          timeToFirstFrame,
+          averageFps: 0,
+          frameTime: 0,
+        },
+        resourceMetrics: {
+          cpuMemoryMB: 0,
+          textureMemoryMB: 0,
+        },
+      };
+
+      postMessage({ command: 'reportMetrics', metrics });
+      loadStartRef.current = null;
+      setIsLoading(false);
+    });
+  }, [voxelData]);
+
   /**
    * Extensionにメッセージを送信
    */
@@ -82,6 +115,16 @@ export function useExtensionMessage() {
       command: 'loadFile',
       fileName,
       data: Array.from(uint8Array),
+    });
+  };
+
+  /**
+   * ファイルパスからロード（ワークスペース内のファイルD&D用）
+   */
+  const loadFileFromPath = (filePath: string) => {
+    postMessage({
+      command: 'loadFileFromPath',
+      filePath,
     });
   };
 
@@ -119,6 +162,7 @@ export function useExtensionMessage() {
     error,
     isLoading,
     loadFile,
+    loadFileFromPath,
     saveState,
     openAsText,
     reportError,

@@ -1,0 +1,81 @@
+name: Release VSIX
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
+      
+      - name: Get pnpm store directory
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Install webview dependencies
+        run: cd webview && pnpm install --frozen-lockfile
+      
+      - name: Build extension
+        run: pnpm run package
+      
+      - name: Package VSIX
+        run: pnpm exec vsce package --out dist/hakoview.vsix --allow-missing-repository
+      
+      - name: Get version from tag
+        id: tag_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/hakoview.vsix
+          body: |
+            # Hako View v${{ steps.tag_version.outputs.VERSION }}
+            
+            A lightweight Voxel model visualizer for VS Code.
+            
+            ## Installation
+            
+            - Download `hakoview.vsix`
+            - In VS Code, go to Extensions → Install from VSIX
+            - Select the downloaded `hakoview.vsix` file
+            
+            Or install from VS Code Marketplace:
+            - Search for "Hako View" in Extensions
+            - Click Install
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}

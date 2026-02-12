@@ -2,6 +2,7 @@ precision highp float;
 
 uniform vec3 uVoxelShape;
 uniform mat4 uModelMatrixInverse;
+uniform float uIsOrthographic;
 
 varying vec3 vOrigin;
 varying vec3 vModelPosition;
@@ -15,8 +16,18 @@ void main() {
 
     gl_Position = projectedPosition;
 
-    // world space origin and direction
-    vOrigin = cameraPosition.xyz;
-    vDirection = modelPosition.xyz - vOrigin;
     vModelPosition = modelPosition.xyz;
+
+    if (uIsOrthographic > 0.5) {
+        // Orthographic: parallel rays in camera forward direction
+        vec3 cameraForward = -vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]);
+        // Project model position back to camera plane for ray origin
+        float d = dot(modelPosition.xyz - cameraPosition, cameraForward);
+        vOrigin = modelPosition.xyz - cameraForward * d;
+        vDirection = cameraForward;
+    } else {
+        // Perspective: rays diverge from camera position
+        vOrigin = cameraPosition.xyz;
+        vDirection = modelPosition.xyz - cameraPosition.xyz;
+    }
 }
