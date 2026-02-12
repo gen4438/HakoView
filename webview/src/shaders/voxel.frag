@@ -113,18 +113,12 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             float endCoord = (int(uSliceAxis) == 0) ? rayEnd.x :
                              (int(uSliceAxis) == 1) ? rayEnd.y : rayEnd.z;
 
-            // スライス1（正方向カット面）: coord < distance1 の部分を表示
-            // スライス2（逆方向カット面）: coord > distance2 の部分を表示
-            // つまり、distance2 < coord < distance1 の範囲を表示
+            // スライス1は常にpos側（正方向）をカット: coord > distance1 を非表示
+            // スライス2は常にneg側（負方向）をカット: coord < distance2 を非表示
+            // 通常（distance1 >= distance2）: distance2 <= coord <= distance1 の範囲を表示
+            // 逆転（distance1 < distance2）: distance1 < coord < distance2 のみを非表示（それ以外を表示）
 
-            float minDist = min(uSliceDistance1, uSliceDistance2);
-            float maxDist = max(uSliceDistance1, uSliceDistance2);
-
-            // 両端点が範囲外なら描画しない
-            if ((startCoord < minDist && endCoord < minDist) ||
-                (startCoord > maxDist && endCoord > maxDist)) {
-                discard;
-            }
+            bool normalMode = (uSliceDistance1 >= uSliceDistance2);
 
             // 範囲との交差を計算
             float dirCoord = (int(uSliceAxis) == 0) ? directionWS.x :
@@ -133,18 +127,62 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                                 (int(uSliceAxis) == 1) ? originWS.y : originWS.z;
 
             if (abs(dirCoord) > 1e-6) {
-                float t1 = (minDist - originCoord) / dirCoord;
-                float t2 = (maxDist - originCoord) / dirCoord;
-                float tMin = min(t1, t2);
-                float tMax = max(t1, t2);
+                float t1 = (uSliceDistance1 - originCoord) / dirCoord;
+                float t2 = (uSliceDistance2 - originCoord) / dirCoord;
 
-                // レイがスライス範囲に入る/出る位置でtEnter/tExitを調整
-                if (startCoord < minDist || startCoord > maxDist) {
-                    tEnter = max(tEnter, tMin);
-                    clippedAtEnter = true;
+                if (normalMode) {
+                    // 通常モード: distance2 <= coord <= distance1 の範囲を表示
+                    // 両端点が範囲外なら描画しない
+                    if ((startCoord < uSliceDistance2 && endCoord < uSliceDistance2) ||
+                        (startCoord > uSliceDistance1 && endCoord > uSliceDistance1)) {
+                        discard;
+                    }
+
+                    float tMin = min(t1, t2);
+                    float tMax = max(t1, t2);
+
+                    // レイがスライス範囲に入る/出る位置でtEnter/tExitを調整
+                    if (startCoord < uSliceDistance2 || startCoord > uSliceDistance1) {
+                        tEnter = max(tEnter, tMin);
+                        clippedAtEnter = true;
+                    }
+                    if (endCoord < uSliceDistance2 || endCoord > uSliceDistance1) {
+                        tExit = min(tExit, tMax);
+                    }
+                } else {
+                    // 逆転モード: distance1 < coord < distance2 のみを非表示
+                    // 両端点が非表示範囲内にあれば描画しない
+                    if (startCoord > uSliceDistance1 && startCoord < uSliceDistance2 &&
+                        endCoord > uSliceDistance1 && endCoord < uSliceDistance2) {
+                        discard;
+                    }
+
+                    float tMin = min(t1, t2);
+                    float tMax = max(t1, t2);
+
+                    // レイの開始点の位置に応じて処理
+                    if (startCoord <= uSliceDistance1) {
+                        // 非表示範囲より前から開始 → 非表示範囲の手前まで表示
+                        if (endCoord > uSliceDistance1) {
+                            tExit = min(tExit, tMin);
+                        }
+                    } else if (startCoord < uSliceDistance2) {
+                        // 非表示範囲内から開始 → 範囲を抜けた位置から表示
+                        tEnter = max(tEnter, tMax);
+                        clippedAtEnter = true;
+                    }
+                    // startCoord >= uSliceDistance2 の場合は変更なし（そのまま表示）
                 }
-                if (endCoord < minDist || endCoord > maxDist) {
-                    tExit = min(tExit, tMax);
+            } else {
+                // dirCoordがほぼ0の場合（レイがスライス軸に平行）
+                if (normalMode) {
+                    if (startCoord < uSliceDistance2 || startCoord > uSliceDistance1) {
+                        discard;
+                    }
+                } else {
+                    if (startCoord > uSliceDistance1 && startCoord < uSliceDistance2) {
+                        discard;
+                    }
                 }
             }
 
