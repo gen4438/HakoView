@@ -24,6 +24,9 @@
         "selector": [
           {
             "filenamePattern": "*.leS"
+          },
+          {
+            "filenamePattern": "*.leS.gz"
           }
         ],
         "priority": "default"
@@ -51,7 +54,7 @@
       "editor/title": [
         {
           "command": "hakoview.openFromEditor",
-          "when": "resourceExtname == .leS",
+          "when": "resourceExtname == .leS || resourceExtname == .gz",
           "group": "navigation"
         }
       ],
@@ -62,7 +65,7 @@
         },
         {
           "command": "hakoview.openFromEditor",
-          "when": "resourceExtname == .leS"
+          "when": "resourceExtname == .leS || resourceExtname == .gz"
         }
       ]
     },

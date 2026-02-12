@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as zlib from 'zlib';
 import { VoxelDocument } from './VoxelDocument';
 import { getWebviewHtml } from './getWebviewHtml';
 import {
@@ -227,7 +228,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 
         case 'loadFile':
           try {
-            const data = new Uint8Array(message.data);
+            let data = new Uint8Array(message.data);
+
+            // gzip圧縮されているか確認
+            if (message.fileName.toLowerCase().endsWith('.gz')) {
+              data = zlib.gunzipSync(data);
+            }
+
             const dataset = LesParser.parse(data, message.fileName);
             sendVoxelData(webviewPanel.webview, dataset, true);
             webviewPanel.title = message.fileName;
@@ -253,8 +260,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             }
 
             // ファイルを読み込み
-            const fileData = await vscode.workspace.fs.readFile(uri);
+            let fileData = await vscode.workspace.fs.readFile(uri);
             const fileName = uri.path.split('/').pop() || 'unknown.leS';
+
+            // gzip圧縮されているか確認
+            if (fileName.toLowerCase().endsWith('.gz')) {
+              fileData = zlib.gunzipSync(fileData);
+            }
 
             // パース
             const dataset = LesParser.parse(fileData, fileName);

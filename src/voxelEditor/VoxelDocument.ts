@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as zlib from 'zlib';
 import { VoxelDataset } from '../voxelParser/VoxelData';
 import { LesParser } from '../voxelParser/LesParser';
 import { ParseError } from '../voxelParser/validation';
@@ -58,7 +59,14 @@ export class VoxelDocument implements vscode.CustomDocument {
       const fileName = this._uri.path.split('/').pop() || 'untitled.leS';
       const filePath = this._uri.fsPath;
 
-      this._dataset = LesParser.parse(content, fileName, filePath);
+      // gzip圧縮されているか確認
+      let processedContent = content;
+      if (fileName.toLowerCase().endsWith('.gz')) {
+        // gzip解凍
+        processedContent = zlib.gunzipSync(content);
+      }
+
+      this._dataset = LesParser.parse(processedContent, fileName, filePath);
       this._error = null;
     } catch (error) {
       this._error = error instanceof Error ? error : new Error(String(error));

@@ -115,8 +115,9 @@ export function validateDataArray(values: Uint8Array, dimensions: Dimensions): v
  * ファイル拡張子の検証
  */
 export function validateFileExtension(fileName: string): void {
-  if (!fileName.toLowerCase().endsWith('.les')) {
-    throw new ParseError(`Invalid file extension. Expected .leS file, got: ${fileName}`);
+  const lowerFileName = fileName.toLowerCase();
+  if (!lowerFileName.endsWith('.les') && !lowerFileName.endsWith('.les.gz')) {
+    throw new ParseError(`Invalid file extension. Expected .leS or .leS.gz file, got: ${fileName}`);
   }
 }
 
