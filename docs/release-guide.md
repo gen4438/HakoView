@@ -1,6 +1,6 @@
-# リリースガイド
+# リリースガイド - Hako View
 
-このドキュメントでは、Hako View 拡張機能のバージョン管理とリリースプロセスについて説明します。
+このドキュメントでは、Hako View拡張機能のリリースプロセスについて説明します。
 
 ## バージョニング戦略
 
@@ -25,174 +25,66 @@ v{MAJOR}.{MINOR}.{PATCH}
 
 ### 自動リリース（推奨）
 
-npm スクリプトを使って、バージョンアップとタグ作成を一度に実行できます。
+package.jsonのスクリプトを使用して、バージョン更新からリリースまでを自動化できます。
 
 ```bash
-# パッチバージョンアップ (0.1.0 → 0.1.1)
+# パッチバージョンアップ (0.3.1 → 0.3.2)
 pnpm run release:patch
 
-# マイナーバージョンアップ (0.1.0 → 0.2.0)
+# マイナーバージョンアップ (0.3.1 → 0.4.0)
 pnpm run release:minor
 
-# メジャーバージョンアップ (0.1.0 → 1.0.0)
+# メジャーバージョンアップ (0.3.1 → 1.0.0)
 pnpm run release:major
 ```
 
-これにより以下が自動実行されます：
+これらのコマンドは `scripts/bump-version.js` を実行し、以下を自動的に行います：
 
-1. `package.json` のバージョン更新
+1. `package.json` と `webview/package.json` のバージョン更新
 2. バージョン更新のコミット作成
-3. 対応するタグ作成（例: `v0.2.0`）
-4. main ブランチとタグをリモートにプッシュ
-5. GitHub Actions が自動的にリリースワークフローを開始
+3. 対応するGitタグ作成（例: `v0.4.0`）
+4. mainブランチとタグをリモートにプッシュ
+5. GitHub Actionsが自動的にリリースワークフローを開始
 
-### 手動リリース
+### リリースワークフローの流れ
 
-細かくコントロールしたい場合は手動で実行できます。
+タグがプッシュされると、`.github/workflows/release.yml` が自動実行されます：
 
-```bash
-# 1. package.json のバージョンを手動で編集
-# "version": "0.2.0" に変更
+1. **ビルドジョブ**: 3つのプラットフォーム向けに並列ビルド
+   - macOS (Apple Silicon): `hakoview-vX.Y.Z-darwin-arm64.vsix`
+   - Linux (x64): `hakoview-vX.Y.Z-linux-x64.vsix`
+   - Windows (x64): `hakoview-vX.Y.Z-win32-x64.vsix`
 
-# 2. 変更をコミット
-git add package.json
-git commit -m "Bump version to 0.2.0"
+2. **リリースジョブ**: GitHub Releaseの作成
+   - 全てのプラットフォーム別VSIXを添付
+   - インストール手順を含むリリースノートを自動生成
 
-# 3. タグを作成（アノテーテッドタグ推奨）
-git tag -a v0.2.0 -m "Release v0.2.0
+## ローカルテスト
 
-新機能:
-- 機能A追加
-- 機能B改善
-
-修正:
-- バグX修正"
-
-# 4. プッシュ
-git push origin main
-git push origin v0.2.0
-```
-
-## GitHub Actions ワークフロー
-
-タグがプッシュされると、[.github/workflows/release.yml](../.github/workflows/release.yml) が自動実行されます。
-
-### ビルドされるプラットフォーム
-
-| ファイル名                   | プラットフォーム | アーキテクチャ           |
-| ---------------------------- | ---------------- | ------------------------ |
-| `hakoview-darwin-arm64.vsix` | macOS            | Apple Silicon (M1/M2/M3) |
-| `hakoview-linux-x64.vsix`    | Linux            | x64 (Intel/AMD)          |
-| `hakoview-win32-x64.vsix`    | Windows          | x64 (Intel/AMD)          |
-
-**注**: `win32-x64` の `win32` は歴史的な呼称で、実際には64ビットWindowsを指します。
-
-### ワークフローの流れ
-
-1. **build ジョブ**: 3つのプラットフォーム向けに並列ビルド
-   - 依存関係インストール
-   - 拡張機能とwebviewをビルド
-   - プラットフォーム別VSIXパッケージ作成
-   - artifactとしてアップロード
-
-2. **release ジョブ**: GitHub Releaseの作成
-   - 全artifactをダウンロード
-   - GitHub Releaseを作成し、3つのVSIXを添付
-
-## タグ管理コマンド
-
-### タグの確認
+リリース前にローカルでVSIXパッケージをテストできます：
 
 ```bash
-# 全タグをリスト表示
-git tag --list
+# VSIXパッケージを作成（バージョン付きファイル名）
+pnpm run vsix
 
-# 特定パターンのタグを検索
-git tag --list "v0.*"
-
-# タグの詳細情報を表示
-git show v0.1.0
-
-# タグとコミットの関係を表示
-git log --oneline --decorate --graph
+# または vsce コマンドを直接使用
+pnpm exec vsce package --allow-missing-repository
 ```
 
-### タグの削除
+作成されたVSIXは `dist/` ディレクトリに保存されます。
 
-```bash
-# ローカルタグを削除
-git tag -d v0.1.0
+### VSCodeへの手動インストール
 
-# リモートタグを削除
-git push origin --delete v0.1.0
-
-# ローカルとリモート両方を削除
-git tag -d v0.1.0 && git push origin --delete v0.1.0
-```
-
-### タグの修正
-
-既にプッシュしたタグは、削除して再作成する必要があります。
-
-```bash
-# 1. ローカルタグを削除
-git tag -d v0.1.0
-
-# 2. リモートタグを削除
-git push origin --delete v0.1.0
-
-# 3. 正しいコミットで再作成
-git tag -a v0.1.0 -m "正しいリリースノート" <commit-hash>
-
-# 4. 再プッシュ
-git push origin v0.1.0
-```
-
-**注意**: 既にリリースが公開されている場合は、タグの修正ではなく新しいパッチバージョンをリリースすることを推奨します。
-
-## リリースノートのベストプラクティス
-
-### アノテーテッドタグを使用
-
-軽量タグではなくアノテーテッドタグ（`-a`）を使うことで、詳細なメッセージを記録できます。
-
-```bash
-git tag -a v0.2.0 -m "Release v0.2.0
-
-## 新機能
-- ボクセルモデルの回転アニメーション
-- カスタムカラーパレットのエクスポート/インポート
-
-## 改善
-- レンダリングパフォーマンスを20%向上
-- メモリ使用量を削減
-
-## バグ修正
-- 大きなファイル読み込み時のクラッシュを修正
-- Windows環境でのパス問題を解決
-
-## 破壊的変更
-- 設定キー名を変更: `hakoview.colormap` → `hakoview.defaultColormap`
-"
-```
-
-### GitHub Release のボディ
-
-GitHub Actions が自動生成する Release ボディは、[release.yml](../.github/workflows/release.yml) の `body` セクションで編集できます。
-
-現在のテンプレート:
-
-- バージョン番号
-- プラットフォーム別パッケージの表
-- インストール手順
-
-必要に応じてワークフローファイルを編集してカスタマイズできます。
+1. VS Codeを開く
+2. 拡張機能ビュー (Ctrl+Shift+X / Cmd+Shift+X) を開く
+3. 「...」メニュー → 「VSIXからのインストール...」をクリック
+4. `dist/hakoview-vX.Y.Z.vsix` ファイルを選択
 
 ## トラブルシューティング
 
 ### ワークフローが開始されない
 
-**原因**: タグがプッシュされていない、またはパターンが一致しない
+**原因**: タグがプッシュされていない、またはタグ形式が正しくない
 
 **解決策**:
 
@@ -200,9 +92,9 @@ GitHub Actions が自動生成する Release ボディは、[release.yml](../.gi
 # タグがリモートにあるか確認
 git ls-remote --tags origin
 
-# ワークフローのトリガーパターンは v*.*.* なので、v から始まる必要がある
-git tag v0.1.0  # ○
-git tag 0.1.0   # × (v がない)
+# タグ形式は v*.*.* である必要がある
+git tag v0.4.0  # ○ 正しい
+git tag 0.4.0   # × vがない
 ```
 
 ### ビルドが失敗する
@@ -215,25 +107,40 @@ git tag 0.1.0   # × (v がない)
 # ローカルで再現できるか確認
 pnpm run build:prod
 
-# webview の依存関係も確認
+# webviewの依存関係も確認
 cd webview && pnpm install && cd ..
 
-# GitHub Actions のログを確認
+# GitHub Actionsのログを確認
 # https://github.com/gen4438/HakoView/actions
 ```
 
-### package.json とタグのバージョンが一致しない
+### バージョン番号の修正が必要な場合
 
-**原因**: 手動でタグを作成したが、package.json を更新し忘れた
-
-**解決策**:
+既にタグをプッシュしてしまった場合は、削除して再作成できます：
 
 ```bash
-# 自動リリーススクリプトを使用（推奨）
-pnpm run release:minor
+# ローカルタグを削除
+git tag -d v0.4.0
 
-# または手動で package.json を更新してからタグ作成
+# リモートタグを削除
+git push origin --delete v0.4.0
+
+# 正しいバージョンで再作成
+pnpm run release:minor  # または patch/major
 ```
+
+**注意**: 既にリリースが公開されている場合は、タグの修正ではなく新しいパッチバージョンをリリースすることを推奨します。
+
+## リリースチェックリスト
+
+リリース前に確認すべき項目：
+
+- [ ] `pnpm run lint` が通る
+- [ ] `pnpm run test` が通る
+- [ ] `pnpm run check-types` が通る
+- [ ] ローカルで `pnpm run build:prod` が成功する
+- [ ] README.mdが最新の状態
+- [ ] 必要に応じてCHANGELOG.mdを更新
 
 ## 参考リンク
 
