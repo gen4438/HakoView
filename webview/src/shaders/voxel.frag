@@ -255,6 +255,30 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                 position = floor(pNew + halfOdd + sgn * 1e-4) - halfOdd;
                 vec3 nb = position + step(vec3(0.0), stepVec);
                 tMax = (nb - origin) * invDir;
+
+                // スキップ先のボクセルをサンプリング（ブロック境界の表面を見逃さないため）
+                samplePos = position + vec3(0.5);
+                vec4 skipVoxel = sampleVoxel(samplePos);
+                bool skipOccupied = (skipVoxel.a > 0.0);
+
+                if (skipOccupied) {
+                    // 空→実体の遷移をスキップ境界で検出
+                    voxel = skipVoxel;
+                    hitDistance = tSkip;
+                    // スキップで横切った面の法線を計算
+                    vec3 skipMask = vec3(0.0);
+                    if (tBlockFar.x <= tBlockFar.y && tBlockFar.x <= tBlockFar.z) {
+                        skipMask.x = 1.0;
+                    } else if (tBlockFar.y <= tBlockFar.z) {
+                        skipMask.y = 1.0;
+                    } else {
+                        skipMask.z = 1.0;
+                    }
+                    hitNormal = -stepVec * skipMask;
+                    hit = true;
+                    break;
+                }
+
                 prevOccupied = false;
                 continue;
             }
