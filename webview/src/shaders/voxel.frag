@@ -249,10 +249,6 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     vec4 prevVoxel    = sampleVoxel(samplePos);
     bool prevOccupied = (prevVoxel.a > 0.0);
 
-    // 内部フルソリッド時用のフォールバックに備えて、開始時の状態を保持
-    bool startedOccupied = prevOccupied;
-    vec4 startedVoxel    = prevVoxel;
-
     // （外部スタート時のみ）入口面の即時ヒット確定
     if (!insideStart && prevOccupied) {
         vec3 n;
@@ -344,34 +340,8 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     }
     
     if (!hit) {
-        // 内部スタート & 開始セルが実体 なのにヒットが無い → 視線方向がずっと実体
-        if (insideStart && startedOccupied) {
-            // どの軸で AABB を抜けるか（tExit は tMax3 の最小）
-            float dx = abs(tExit - tMax3.x);
-            float dy = abs(tExit - tMax3.y);
-            float dz = abs(tExit - tMax3.z);
-            int exitAxis = (dx <= dy && dx <= dz) ? 0 : ((dy <= dz) ? 1 : 2);
-
-            vec3 n = vec3(0.0);
-            if (exitAxis == 0) n.x = sign(direction.x);
-            if (exitAxis == 1) n.y = sign(direction.y);
-            if (exitAxis == 2) n.z = sign(direction.z);
-
-            float hitDistance = tExit - 1e-5; // ほんの少し手前で確定
-            vec4  voxel       = startedVoxel;
-
-            vec3 realPosition = originWS + directionWS * hitDistance;
-            // Orthographicの場合はカメラ位置を使用
-            vec3 lightDir = uIsOrthographic > 0.5
-                ? normalize(cameraPosition - realPosition)
-                : normalize(vOrigin - realPosition);
-            float diff = max(dot(n, lightDir), 0.0);
-            float lighting = uAmbientIntensity + uLightIntensity * diff;
-            vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, n);
-            return vec4(finalColor, voxel.a);
-        }
-
-        // ここまで来たら何も当たっていない（外・空洞へ抜けた）
+        // カメラが実体内部にいる場合も含め、空→実体の遷移なし → 描画なし
+        // (inside→outside = 描画なし のルールに従う)
         return vec4(0.0);
     }
 
