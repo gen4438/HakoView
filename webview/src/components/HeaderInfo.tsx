@@ -1,6 +1,6 @@
 import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGear } from '@fortawesome/free-solid-svg-icons';
+import { faGear, faFileLines, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import type { VoxelDataMessage } from '../types/voxel';
 
 interface HeaderInfoProps {
@@ -102,7 +102,7 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({
           e.currentTarget.style.background = 'var(--vscode-button-background)';
         }}
       >
-        <span>📝</span>
+        <FontAwesomeIcon icon={faFileLines} />
         <span>テキストエディタで開く</span>
       </button>
 
@@ -139,7 +139,7 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({
             e.currentTarget.style.background = 'var(--vscode-button-background)';
           }}
         >
-          <span>💾</span>
+          <FontAwesomeIcon icon={faFloppyDisk} />
           <span>画像を保存</span>
         </button>
 
