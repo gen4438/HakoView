@@ -108,15 +108,6 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             // Mode 0: Off (何もしない)
         } else if (uClippingMode < 1.5) {
             // Mode 1: Slice (2面スライス)
-            vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
-            vec3 rayEnd = originWS + directionWS * tExit;
-
-            // 軸方向の座標を取得
-            float startCoord = (int(uSliceAxis) == 0) ? rayStart.x :
-                               (int(uSliceAxis) == 1) ? rayStart.y : rayStart.z;
-            float endCoord = (int(uSliceAxis) == 0) ? rayEnd.x :
-                             (int(uSliceAxis) == 1) ? rayEnd.y : rayEnd.z;
-
             // スライス1は常にpos側（正方向）をカット: coord > distance1 を非表示
             // スライス2は常にneg側（負方向）をカット: coord < distance2 を非表示
             // 通常（distance1 >= distance2）: distance2 <= coord <= distance1 の範囲を表示
@@ -124,61 +115,54 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 
             bool normalMode = (uSliceDistance1 >= uSliceDistance2);
 
-            // 範囲との交差を計算
+            // レイ方向と原点のスライス軸成分を取得
             float dirCoord = (int(uSliceAxis) == 0) ? directionWS.x :
                              (int(uSliceAxis) == 1) ? directionWS.y : directionWS.z;
             float originCoord = (int(uSliceAxis) == 0) ? originWS.x :
                                 (int(uSliceAxis) == 1) ? originWS.y : originWS.z;
 
             if (abs(dirCoord) > 1e-6) {
+                // t値ベースのクリッピング: 座標比較ではなくt値で直接クランプすることで
+                // スライス面がAABB面と一致する境界ケースでの浮動小数点精度問題を回避
                 float t1 = (uSliceDistance1 - originCoord) / dirCoord;
                 float t2 = (uSliceDistance2 - originCoord) / dirCoord;
+                float origTEnter = tEnter;
 
                 if (normalMode) {
                     // 通常モード: distance2 <= coord <= distance1 の範囲を表示
-                    // 両端点が範囲外なら描画しない
-                    if ((startCoord < uSliceDistance2 && endCoord < uSliceDistance2) ||
-                        (startCoord > uSliceDistance1 && endCoord > uSliceDistance1)) {
-                        discard;
-                    }
+                    // 表示範囲のt区間（レイ方向に依存せずmin/maxで正しい順序になる）
+                    float tSliceEnter = min(t1, t2);
+                    float tSliceExit = max(t1, t2);
 
-                    float tMin = min(t1, t2);
-                    float tMax = max(t1, t2);
-
-                    // レイがスライス範囲に入る/出る位置でtEnter/tExitを調整
-                    if (startCoord < uSliceDistance2 || startCoord > uSliceDistance1) {
-                        tEnter = max(tEnter, tMin);
-                        clippedAtEnter = true;
-                    }
-                    if (endCoord < uSliceDistance2 || endCoord > uSliceDistance1) {
-                        tExit = min(tExit, tMax);
-                    }
+                    tEnter = max(tEnter, tSliceEnter);
+                    tExit = min(tExit, tSliceExit);
                 } else {
                     // 逆転モード: distance1 < coord < distance2 のみを非表示
-                    // 両端点が非表示範囲内にあれば描画しない
-                    if (startCoord > uSliceDistance1 && startCoord < uSliceDistance2 &&
-                        endCoord > uSliceDistance1 && endCoord < uSliceDistance2) {
-                        discard;
-                    }
+                    // 非表示範囲のt区間
+                    float tHiddenStart = min(t1, t2);
+                    float tHiddenEnd = max(t1, t2);
 
-                    float tMin = min(t1, t2);
-                    float tMax = max(t1, t2);
+                    float currentStart = max(tEnter, 0.0);
 
-                    // レイの開始点の位置に応じて処理
-                    if (startCoord <= uSliceDistance1) {
-                        // 非表示範囲より前から開始 → 非表示範囲の手前まで表示
-                        if (endCoord > uSliceDistance1) {
-                            tExit = min(tExit, tMin);
-                        }
-                    } else if (startCoord < uSliceDistance2) {
-                        // 非表示範囲内から開始 → 範囲を抜けた位置から表示
-                        tEnter = max(tEnter, tMax);
-                        clippedAtEnter = true;
+                    if (currentStart >= tHiddenEnd) {
+                        // 非表示ゾーン後から開始 → クリッピング不要
+                    } else if (currentStart >= tHiddenStart) {
+                        // 非表示ゾーン内から開始 → ゾーン終端へスキップ
+                        tEnter = max(tEnter, tHiddenEnd);
+                    } else {
+                        // 非表示ゾーン前から開始 → ゾーン開始でクリップ
+                        tExit = min(tExit, tHiddenStart);
                     }
-                    // startCoord >= uSliceDistance2 の場合は変更なし（そのまま表示）
                 }
+
+                if (tExit <= max(tEnter, 0.0)) discard;
+
+                clippedAtEnter = (tEnter > origTEnter + 1e-5);
             } else {
                 // dirCoordがほぼ0の場合（レイがスライス軸に平行）
+                vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
+                float startCoord = (int(uSliceAxis) == 0) ? rayStart.x :
+                                   (int(uSliceAxis) == 1) ? rayStart.y : rayStart.z;
                 if (normalMode) {
                     if (startCoord < uSliceDistance2 || startCoord > uSliceDistance1) {
                         discard;
@@ -189,8 +173,6 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                     }
                 }
             }
-
-            if (tExit <= max(tEnter, 0.0)) discard;
         } else {
             // Mode 2: Custom (従来の1面クリッピング)
             vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
