@@ -17,6 +17,7 @@ export type ExtensionToWebviewMessage =
  */
 export interface ViewerSettings {
   colormap?: Record<string, string>;
+  devicePixelRatio?: number | null;
 }
 
 /**

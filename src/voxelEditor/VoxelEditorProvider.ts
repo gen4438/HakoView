@@ -193,11 +193,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   private sendSettings(webview: vscode.Webview): void {
     const config = vscode.workspace.getConfiguration('hakoview');
     const colormap = config.get<Record<string, string>>('defaultColormap');
+    const devicePixelRatio = config.get<number | null>('devicePixelRatio');
 
     postMessageToWebview(webview, {
       type: 'updateSettings',
       settings: {
         colormap,
+        devicePixelRatio,
       },
     });
   }
@@ -208,7 +210,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   private setupMessageHandling(document: VoxelDocument, webviewPanel: vscode.WebviewPanel): void {
     // 設定変更の監視
     const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('hakoview.defaultColormap')) {
+      if (
+        e.affectsConfiguration('hakoview.defaultColormap') ||
+        e.affectsConfiguration('hakoview.devicePixelRatio')
+      ) {
         this.sendSettings(webviewPanel.webview);
       }
     });

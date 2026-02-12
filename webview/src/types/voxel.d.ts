@@ -45,6 +45,7 @@ export interface ViewerSettings {
     distance: number;
   };
   colormap?: Record<string, string>;
+  devicePixelRatio?: number | null;
 }
 
 /**

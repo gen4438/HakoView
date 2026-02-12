@@ -17,7 +17,7 @@ import {
   Stats,
   shaderMaterial,
 } from '@react-three/drei';
-import { folder, useControls, Leva, button } from 'leva';
+import { folder, useControls, Leva, button, useCreateStore } from 'leva';
 import { useWindowSize } from 'react-use';
 import * as THREE from 'three';
 import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
@@ -515,6 +515,16 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // 画像キャプチャ用のref
     const captureRef = useRef<((width?: number, height?: number) => Promise<string>) | null>(null);
 
+    // 軸視点の状態を追跡（正方向=1, 負方向=-1）
+    const axisViewState = useRef({ x: 1, y: 1, z: 1 });
+
+    // 数値入力バッファ（スライス位置調整用）
+    const [numericBuffer, setNumericBuffer] = useState<string>('');
+    const numericBufferTimeoutRef = useRef<number | null>(null);
+
+    // Clippingメニューの展開状態を管理
+    const [isClippingCollapsed, setIsClippingCollapsed] = useState(true);
+
     // 外部から呼び出し可能なメソッドを公開
     useImperativeHandle(ref, () => ({
       captureImage: async (width?: number, height?: number) => {
@@ -552,7 +562,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       edgeMaxDistance: 200,
       clippingMode: 'Off',
       sliceAxis: 'Z',
-      slicePosition: 0,
+      slicePosition: 0, // 後で各軸の半分に設定
       sliceReverse: false,
       customNormalX: 0,
       customNormalY: 0,
@@ -560,6 +570,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       customDistance: 0,
       usePerspective: true,
       showScaleBar: true,
+      showBoundingBox: false,
     });
 
     // Levaから独立した状態更新関数
@@ -582,61 +593,99 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // DPR管理
     const { width, height } = useWindowSize();
     const [currentDevicePixelRatio, setCurrentDevicePixelRatio] = useState(window.devicePixelRatio);
-    const maxDpr = Math.min(currentDevicePixelRatio, 3.0);
+    // 設定からDPRを取得、nullの場合は自動検出
+    const configuredDpr = settings?.devicePixelRatio ?? null;
+    const maxDpr =
+      configuredDpr !== null
+        ? Math.min(Math.max(configuredDpr, 0.5), 4.0)
+        : Math.min(currentDevicePixelRatio, 3.0);
 
-    // Levaコントロール
+    // ボクセルサイズに基づく動的な範囲を計算
+    const { x, y, z } = voxelData.dimensions;
+    const maxDim = Math.max(x, y, z);
+    const sliceRange = maxDim; // 原点を左下隅に変更: 0〜maxDim
+    const distanceRange = Math.ceil(maxDim * 2);
+    const edgeMaxRange = Math.ceil(maxDim * 3);
+
+    // デフォルト値の初期化（初回のみ）
+    if (defaultValues.current.slicePosition === 0) {
+      defaultValues.current.slicePosition = maxDim / 2;
+    }
+
+    // Clipping専用のLevaストアを作成
+    const clippingStore = useCreateStore();
+
+    // Clippingコントロール（別のLeva）
+    const [clippingControls, setClipping] = useControls(
+      () => ({
+        clippingMode: {
+          value: defaultValues.current.clippingMode,
+          options: ['Off', 'Slice', 'Custom'],
+        },
+        slice: folder(
+          {
+            sliceAxis: {
+              value: defaultValues.current.sliceAxis,
+              options: ['X', 'Y', 'Z'],
+              render: (get: any) => get('clippingMode') === 'Slice',
+            },
+            slicePosition: {
+              value: defaultValues.current.slicePosition,
+              min: 0,
+              max: sliceRange,
+              step: 1,
+              render: (get: any) => get('clippingMode') === 'Slice',
+            },
+            sliceReverse: {
+              value: defaultValues.current.sliceReverse,
+              label: 'Reverse Direction',
+              render: (get: any) => get('clippingMode') === 'Slice',
+            },
+          },
+          { collapsed: false }
+        ),
+        custom: folder(
+          {
+            customNormalX: {
+              value: defaultValues.current.customNormalX,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clippingMode') === 'Custom',
+            },
+            customNormalY: {
+              value: defaultValues.current.customNormalY,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clippingMode') === 'Custom',
+            },
+            customNormalZ: {
+              value: defaultValues.current.customNormalZ,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clippingMode') === 'Custom',
+            },
+            customDistance: {
+              value: defaultValues.current.customDistance,
+              min: -distanceRange,
+              max: distanceRange,
+              step: 1,
+              render: (get: any) => get('clippingMode') === 'Custom',
+            },
+          },
+          { collapsed: false }
+        ),
+      }),
+      { store: clippingStore },
+      [sliceRange, distanceRange]
+    );
+
+    // メインのLevaコントロール
     const [controls, set] = useControls(
       () => ({
-        Reset: button(() => {
-          // ボクセル値表示とカスタム色のリセット用オブジェクト
-          const voxelResetValues: Record<string, any> = {};
-          for (let i = 0; i < 16; i++) {
-            voxelResetValues[`visible${i}`] = i !== 0; // 0は非表示、1-15は表示
-            voxelResetValues[`color${i}`] = defaultPalette[i] || '#000000';
-          }
-
-          // すべての設定をデフォルト値に戻す
-          set({
-            alpha: defaultValues.current.alpha,
-            dpr: maxDpr,
-            fov: defaultValues.current.fov,
-            far: defaultValues.current.far,
-            lightIntensity: defaultValues.current.lightIntensity,
-            ambientIntensity: defaultValues.current.ambientIntensity,
-            enableEdgeHighlight: defaultValues.current.enableEdgeHighlight,
-            edgeThickness: defaultValues.current.edgeThickness,
-            edgeColor: defaultValues.current.edgeColor,
-            edgeIntensity: defaultValues.current.edgeIntensity,
-            edgeMaxDistance: defaultValues.current.edgeMaxDistance,
-            clippingMode: defaultValues.current.clippingMode,
-            sliceAxis: defaultValues.current.sliceAxis,
-            slicePosition: defaultValues.current.slicePosition,
-            sliceReverse: defaultValues.current.sliceReverse,
-            customNormalX: defaultValues.current.customNormalX,
-            customNormalY: defaultValues.current.customNormalY,
-            customNormalZ: defaultValues.current.customNormalZ,
-            customDistance: defaultValues.current.customDistance,
-            showScaleBar: defaultValues.current.showScaleBar,
-            ...voxelResetValues,
-          });
-
-          // React状態もリセット（onChangeが呼ばれない場合のため）
-          setValueVisibility(
-            Array(16)
-              .fill(0)
-              .map((_, i) => i !== 0)
-          );
-          setCustomColors(
-            Array(16)
-              .fill('')
-              .map((_, i) => defaultPalette[i] || '#000000')
-          );
-
-          // カメラ位置もリセット
-          if (controlsRef.current) {
-            controlsRef.current.reset();
-          }
-        }),
+        Reset: button(() => resetAllSettings()),
         usePerspective: { value: true, label: 'Perspective' },
         edgeHighlight: folder(
           {
@@ -657,7 +706,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             edgeMaxDistance: {
               value: defaultValues.current.edgeMaxDistance,
               min: 50,
-              max: 1000,
+              max: Math.max(edgeMaxRange, 200),
               step: 10,
             },
           },
@@ -686,60 +735,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               }),
               {}
             ),
-          },
-          { collapsed: true }
-        ),
-        clipping: folder(
-          {
-            clippingMode: {
-              value: defaultValues.current.clippingMode,
-              options: ['Off', 'Slice', 'Custom'],
-            },
-            sliceAxis: {
-              value: defaultValues.current.sliceAxis,
-              options: ['X', 'Y', 'Z'],
-              render: (get: any) => get('clipping.clippingMode') === 'Slice',
-            },
-            slicePosition: {
-              value: defaultValues.current.slicePosition,
-              min: -150,
-              max: 150,
-              step: 1,
-              render: (get: any) => get('clipping.clippingMode') === 'Slice',
-            },
-            sliceReverse: {
-              value: defaultValues.current.sliceReverse,
-              label: 'Reverse Direction',
-              render: (get: any) => get('clipping.clippingMode') === 'Slice',
-            },
-            customNormalX: {
-              value: defaultValues.current.customNormalX,
-              min: -1,
-              max: 1,
-              step: 0.01,
-              render: (get: any) => get('clipping.clippingMode') === 'Custom',
-            },
-            customNormalY: {
-              value: defaultValues.current.customNormalY,
-              min: -1,
-              max: 1,
-              step: 0.01,
-              render: (get: any) => get('clipping.clippingMode') === 'Custom',
-            },
-            customNormalZ: {
-              value: defaultValues.current.customNormalZ,
-              min: -1,
-              max: 1,
-              step: 0.01,
-              render: (get: any) => get('clipping.clippingMode') === 'Custom',
-            },
-            customDistance: {
-              value: defaultValues.current.customDistance,
-              min: -300,
-              max: 300,
-              step: 1,
-              render: (get: any) => get('clipping.clippingMode') === 'Custom',
-            },
           },
           { collapsed: true }
         ),
@@ -772,11 +767,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         display: folder(
           {
             showScaleBar: { value: true, label: 'Scale Bar' },
+            showBoundingBox: { value: false, label: 'Bounding Box' },
           },
           { collapsed: true }
         ),
       }),
-      [maxDpr, updateValueVisibility, updateCustomColor]
+      [maxDpr, updateValueVisibility, updateCustomColor, sliceRange, distanceRange, edgeMaxRange]
     );
 
     // 設定が変更されたらカスタム色を更新
@@ -818,6 +814,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       edgeColor,
       edgeIntensity,
       edgeMaxDistance,
+      showScaleBar,
+      showBoundingBox,
+    } = controls;
+
+    // Clipping設定を取得
+    const {
       clippingMode,
       sliceAxis,
       slicePosition,
@@ -826,33 +828,299 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       customNormalY,
       customNormalZ,
       customDistance,
-      showScaleBar,
-    } = controls;
+    } = clippingControls;
+
+    // リセット処理を関数化（Resetボタンと"R"キーの両方から使用）
+    const resetAllSettings = useCallback(() => {
+      // ボクセル値表示とカスタム色のリセット用オブジェクト
+      const voxelResetValues: Record<string, any> = {};
+      for (let i = 0; i < 16; i++) {
+        voxelResetValues[`visible${i}`] = i !== 0; // 0は非表示、1-15は表示
+        voxelResetValues[`color${i}`] = defaultPalette[i] || '#000000';
+      }
+
+      // すべての設定をデフォルト値に戻す
+      set({
+        alpha: defaultValues.current.alpha,
+        dpr: maxDpr,
+        fov: defaultValues.current.fov,
+        far: defaultValues.current.far,
+        lightIntensity: defaultValues.current.lightIntensity,
+        ambientIntensity: defaultValues.current.ambientIntensity,
+        enableEdgeHighlight: defaultValues.current.enableEdgeHighlight,
+        edgeThickness: defaultValues.current.edgeThickness,
+        edgeColor: defaultValues.current.edgeColor,
+        edgeIntensity: defaultValues.current.edgeIntensity,
+        edgeMaxDistance: defaultValues.current.edgeMaxDistance,
+        showScaleBar: defaultValues.current.showScaleBar,
+        showBoundingBox: defaultValues.current.showBoundingBox,
+        ...voxelResetValues,
+      });
+
+      // Clippingコントロールもリセット
+      setClipping({
+        clippingMode: defaultValues.current.clippingMode,
+        sliceAxis: defaultValues.current.sliceAxis,
+        slicePosition: defaultValues.current.slicePosition,
+        sliceReverse: defaultValues.current.sliceReverse,
+        customNormalX: defaultValues.current.customNormalX,
+        customNormalY: defaultValues.current.customNormalY,
+        customNormalZ: defaultValues.current.customNormalZ,
+        customDistance: defaultValues.current.customDistance,
+      });
+
+      // React状態もリセット（onChangeが呼ばれない場合のため）
+      setValueVisibility(
+        Array(16)
+          .fill(0)
+          .map((_, i) => i !== 0)
+      );
+      setCustomColors(
+        Array(16)
+          .fill('')
+          .map((_, i) => defaultPalette[i] || '#000000')
+      );
+
+      // カメラ位置もリセット
+      if (controlsRef.current) {
+        controlsRef.current.reset();
+      }
+    }, [set, setClipping, maxDpr]);
+
+    // 軸視点に移動する関数
+    const setAxisView = useCallback((axis: 'x' | 'y' | 'z') => {
+      if (!controlsRef.current) return;
+
+      // 状態をトグル
+      axisViewState.current[axis] *= -1;
+      const dir = axisViewState.current[axis];
+
+      // 現在のカメラ位置からtargetまでの距離を計算して維持
+      const camera = controlsRef.current.object;
+      const target = controlsRef.current.target;
+      const currentDistance = camera.position.distanceTo(target);
+
+      // カメラの新しい位置を設定（現在の距離を維持）
+      camera.position.set(
+        axis === 'x' ? dir * currentDistance : 0,
+        axis === 'y' ? dir * currentDistance : 0,
+        axis === 'z' ? dir * currentDistance : 0
+      );
+
+      // up ベクトルを設定（Z軸が上）
+      if (axis === 'x') {
+        camera.up.set(0, 0, 1);
+      } else if (axis === 'y') {
+        camera.up.set(0, 0, 1);
+      } else {
+        // Z軸視点の場合、Y軸を上に
+        camera.up.set(0, 1, 0);
+      }
+
+      // targetを見る
+      camera.lookAt(target);
+      camera.updateProjectionMatrix();
+
+      // TrackballControlsを更新
+      controlsRef.current.update();
+    }, []);
+
+    // 軸周りに90度回転する関数
+    const rotateAroundAxis = useCallback((axis: 'x' | 'y' | 'z') => {
+      if (!controlsRef.current) return;
+
+      const camera = controlsRef.current.object;
+      const currentPos = camera.position.clone();
+      const currentUp = camera.up.clone();
+
+      // 回転軸ベクトル（右手系で正の方向）
+      const rotationAxis = new THREE.Vector3(
+        axis === 'x' ? 1 : 0,
+        axis === 'y' ? 1 : 0,
+        axis === 'z' ? 1 : 0
+      );
+
+      // 90度（π/2ラジアン）回転
+      const angle = Math.PI / 2;
+
+      // カメラ位置を回転
+      currentPos.applyAxisAngle(rotationAxis, angle);
+      camera.position.copy(currentPos);
+
+      // upベクトルも回転
+      currentUp.applyAxisAngle(rotationAxis, angle);
+      camera.up.copy(currentUp);
+
+      // 原点を見る
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+
+      // TrackballControlsを更新
+      controlsRef.current.target.set(0, 0, 0);
+      controlsRef.current.update();
+    }, []);
+
+    // 数値バッファをクリアする関数
+    const clearNumericBuffer = useCallback(() => {
+      setNumericBuffer('');
+      if (numericBufferTimeoutRef.current !== null) {
+        window.clearTimeout(numericBufferTimeoutRef.current);
+        numericBufferTimeoutRef.current = null;
+      }
+    }, []);
+
+    // 数値バッファのタイムアウト設定（2秒後に自動クリア）
+    const resetNumericBufferTimeout = useCallback(() => {
+      if (numericBufferTimeoutRef.current !== null) {
+        window.clearTimeout(numericBufferTimeoutRef.current);
+      }
+      numericBufferTimeoutRef.current = window.setTimeout(() => {
+        clearNumericBuffer();
+      }, 2000);
+    }, [clearNumericBuffer]);
 
     // キーボードショートカット
     useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
 
-        switch (event.key.toLowerCase()) {
+        const key = event.key;
+
+        // ESCキーで数値バッファをクリア
+        if (key === 'Escape') {
+          clearNumericBuffer();
+          return;
+        }
+
+        // 数字キー（0-9）の入力をバッファに追加
+        if (/^[0-9]$/.test(key)) {
+          const newBuffer = numericBuffer + key;
+          setNumericBuffer(newBuffer);
+          resetNumericBufferTimeout();
+          return;
+        }
+
+        // 小文字のキー（x, y, z - 軸視点切り替え）
+        if (key === 'x' || key === 'y' || key === 'z') {
+          clearNumericBuffer();
+          setAxisView(key);
+          return;
+        }
+
+        // 大文字のキー（X, Y, Z - 90度回転）
+        if (key === 'X' || key === 'Y' || key === 'Z') {
+          clearNumericBuffer();
+          rotateAroundAxis(key.toLowerCase() as 'x' | 'y' | 'z');
+          return;
+        }
+
+        // Sliceモード専用のキー
+        if (clippingMode === 'Slice') {
+          // 大文字Cでスライス方向逆転
+          if (key === 'C') {
+            clearNumericBuffer();
+            setClipping({ sliceReverse: !sliceReverse });
+            return;
+          }
+
+          // "g"キー: 数値バッファの位置にジャンプ（例: "25g" → position 25）
+          if (key === 'g' || key === 'G') {
+            if (numericBuffer) {
+              const targetPosition = parseInt(numericBuffer, 10);
+              if (!isNaN(targetPosition)) {
+                const clampedPosition = Math.max(0, Math.min(targetPosition, sliceRange));
+                setClipping({ slicePosition: clampedPosition });
+              }
+            }
+            clearNumericBuffer();
+            return;
+          }
+
+          // +/- キー: 数値バッファ分だけスライス位置を調整（例: "10+" → +10移動）
+          if (key === '+' || key === '=') {
+            const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
+            if (!isNaN(amount)) {
+              const newPosition = Math.min(slicePosition + amount, sliceRange);
+              setClipping({ slicePosition: newPosition });
+            }
+            clearNumericBuffer();
+            return;
+          } else if (key === '-' || key === '_') {
+            const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
+            if (!isNaN(amount)) {
+              const newPosition = Math.max(slicePosition - amount, 0);
+              setClipping({ slicePosition: newPosition });
+            }
+            clearNumericBuffer();
+            return;
+          }
+        }
+
+        // "R"キー（大文字）で設定すべてリセット
+        if (key === 'R') {
+          clearNumericBuffer();
+          resetAllSettings();
+          return;
+        }
+
+        // "r"キー（小文字）でカメラのみリセット
+        if (key === 'r') {
+          clearNumericBuffer();
+          if (controlsRef.current) {
+            controlsRef.current.reset();
+          }
+          return;
+        }
+
+        switch (key.toLowerCase()) {
           case 'p':
+            clearNumericBuffer();
             set({ usePerspective: true });
             break;
           case 'o':
+            clearNumericBuffer();
             set({ usePerspective: false });
             break;
           case 'e':
+            clearNumericBuffer();
             set({ enableEdgeHighlight: !enableEdgeHighlight });
             break;
           case 'c':
-            set({ clippingMode: clippingMode === 'Off' ? 'Slice' : 'Off' });
+            clearNumericBuffer();
+            // "c"キーでclippingを切り替えるときに、展開・折りたたみも制御
+            if (clippingMode === 'Off') {
+              setClipping({ clippingMode: 'Slice' });
+              setIsClippingCollapsed(false); // 有効化したら展開
+            } else {
+              setClipping({ clippingMode: 'Off' });
+              setIsClippingCollapsed(true); // 無効化したら折りたたむ
+            }
+            break;
+          case 'b':
+            clearNumericBuffer();
+            set({ showBoundingBox: !showBoundingBox });
             break;
         }
       };
 
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [enableEdgeHighlight, clippingMode, set]);
+    }, [
+      enableEdgeHighlight,
+      clippingMode,
+      showBoundingBox,
+      slicePosition,
+      sliceRange,
+      sliceReverse,
+      numericBuffer,
+      set,
+      setClipping,
+      setAxisView,
+      rotateAroundAxis,
+      clearNumericBuffer,
+      resetNumericBufferTimeout,
+      resetAllSettings,
+    ]);
 
     // クリッピングプレーン計算
     const calculateClippingPlane = () => {
@@ -862,21 +1130,27 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
       if (clippingMode === 'Slice') {
         const normal = new THREE.Vector3(0, 0, 0);
-        let distance = slicePosition;
+        const { x, y, z } = voxelData.dimensions;
+        let distance = 0;
 
+        // 原点を左下隅(x_min, y_min, z_min)として扱う
+        // slicePositionは0〜maxDimの範囲で、0が最小値、maxDimが最大値
         switch (sliceAxis) {
           case 'X':
             normal.x = sliceReverse ? -1 : 1;
+            // 中心からのオフセットに変換: slicePosition - x/2
+            distance = sliceReverse ? -(slicePosition - x / 2) : slicePosition - x / 2;
             break;
           case 'Y':
             normal.y = sliceReverse ? -1 : 1;
+            distance = sliceReverse ? -(slicePosition - y / 2) : slicePosition - y / 2;
             break;
           case 'Z':
             normal.z = sliceReverse ? -1 : 1;
+            distance = sliceReverse ? -(slicePosition - z / 2) : slicePosition - z / 2;
             break;
         }
 
-        if (sliceReverse) distance = -distance;
         return { normal, distance, enabled: true };
       }
 
@@ -938,25 +1212,9 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       };
     }, []);
 
-    // rキーでカメラリセット
-    useEffect(() => {
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'r' || event.key === 'R') {
-          if (controlsRef.current) {
-            controlsRef.current.reset();
-          }
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-
-      return () => {
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    }, []);
-
     return (
       <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        {/* メインのLeva（右上） */}
         <Leva
           collapsed={true}
           theme={{
@@ -968,6 +1226,64 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           oneLineLabels
           hideCopyButton
         />
+
+        {/* Clipping専用のLeva（右上のメインメニューの下） - clippingStoreを使用 */}
+        <div
+          style={{
+            position: 'fixed',
+            right: '10px',
+            top: '400px', // メインメニューが展開しても重ならず、gizmoともぶつからない位置
+            zIndex: 1000,
+          }}
+        >
+          <div className="leva-clipping-panel">
+            <style>{`
+              .leva-clipping-panel > div {
+                position: relative !important;
+              }
+            `}</style>
+            <Leva
+              {...({ store: clippingStore } as any)}
+              fill
+              flat
+              collapsed={isClippingCollapsed}
+              key={`clipping-${isClippingCollapsed}`} // 折りたたみ状態が変わったら再レンダリング
+              theme={{
+                sizes: {
+                  rootWidth: '320px',
+                  controlWidth: '160px',
+                },
+              }}
+              oneLineLabels
+              hideCopyButton
+              titleBar={{ title: 'Clipping Controls' }}
+            />
+          </div>
+        </div>
+
+        {/* 数値バッファ表示（入力中のみ） */}
+        {numericBuffer && clippingMode === 'Slice' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              padding: '12px 24px',
+              background: 'rgba(0, 0, 0, 0.8)',
+              color: '#00ff00',
+              fontSize: '32px',
+              fontWeight: 'bold',
+              fontFamily: 'monospace',
+              borderRadius: '8px',
+              border: '2px solid #00ff00',
+              zIndex: 1000,
+              pointerEvents: 'none',
+            }}
+          >
+            {numericBuffer}
+          </div>
+        )}
 
         <Canvas
           gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
@@ -1031,6 +1347,21 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             valueVisibility={valueVisibility}
             customColors={customColors}
           />
+
+          {showBoundingBox && (
+            <lineSegments>
+              <edgesGeometry
+                args={[
+                  new THREE.BoxGeometry(
+                    voxelData.dimensions.x,
+                    voxelData.dimensions.y,
+                    voxelData.dimensions.z
+                  ),
+                ]}
+              />
+              <lineBasicMaterial color="#00ff00" linewidth={2} />
+            </lineSegments>
+          )}
 
           {showScaleBar && (
             <ScaleBar dimensions={voxelData.dimensions} voxelLength={voxelData.voxelLength} />

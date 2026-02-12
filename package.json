@@ -96,6 +96,16 @@
             "15": "#17BECF"
           },
           "description": "Default colormap for voxel values. Format: { \"0\": \"#hexcolor\", \"1\": \"#hexcolor\", ... }."
+        },
+        "hakoview.devicePixelRatio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0.5,
+          "maximum": 4,
+          "description": "Device Pixel Ratio (DPR) for rendering. Higher values improve quality but reduce performance. Set to null for auto-detection (recommended). Typical values: 1.0 (standard), 2.0 (high-DPI), 0.5-1.0 (low-spec machines)."
         }
       }
     }
