@@ -73,10 +73,175 @@ declare module 'react' {
 interface VoxelRendererProps {
   voxelData: VoxelDataMessage;
   settings: ViewerSettings | null;
+  onSaveColorSettings?: (colormap: Record<string, string>) => void;
+  onOpenSettings?: () => void;
 }
 
 export interface VoxelRendererRef {
   captureImage: (width?: number, height?: number) => Promise<string>;
+}
+
+// カメラ状態を保存・復元するヘルパーコンポーネント
+// Perspective↔Orthographic切り替え時に姿勢と見た目のスケールを保持する
+// 写像（bijective）: 繰り返し切り替えても値がズレない
+function CameraStateManager({
+  cameraStateRef,
+  controlsRef,
+  usePerspective,
+  fov,
+  canvasHeight,
+  orthoInitialZoomRef,
+}: {
+  cameraStateRef: React.MutableRefObject<{
+    position: THREE.Vector3;
+    up: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    target: THREE.Vector3;
+    isPerspective: boolean;
+    perspFov: number;
+    orthoZoom: number;
+  } | null>;
+  controlsRef: React.MutableRefObject<any>;
+  usePerspective: boolean;
+  fov: number;
+  canvasHeight: number;
+  orthoInitialZoomRef: React.MutableRefObject<number>;
+}) {
+  const { camera } = useThree();
+  const previousCameraTypeRef = useRef<boolean | null>(null);
+  const [isRestoringCamera, setIsRestoringCamera] = useState(false);
+  const restoringFrameCountRef = useRef(0);
+  // 変換後の状態（復元中にuseFrameで適用）
+  const convertedStateRef = useRef<{
+    position: THREE.Vector3;
+    up: THREE.Vector3;
+    quaternion: THREE.Quaternion;
+    target: THREE.Vector3;
+    orthoZoom: number;
+  } | null>(null);
+
+  // 現在のカメラ状態を常に保存（復元中は保存しない）
+  useFrame(() => {
+    if (!camera || !controlsRef.current) return;
+
+    // 復元中の場合は、変換された状態を強制的に適用
+    if (isRestoringCamera && convertedStateRef.current) {
+      camera.position.copy(convertedStateRef.current.position);
+      camera.up.copy(convertedStateRef.current.up);
+      camera.quaternion.copy(convertedStateRef.current.quaternion);
+
+      if ((camera as any).isOrthographicCamera) {
+        (camera as THREE.OrthographicCamera).zoom = convertedStateRef.current.orthoZoom;
+      }
+
+      camera.updateProjectionMatrix();
+
+      if (controlsRef.current) {
+        controlsRef.current.target.copy(convertedStateRef.current.target);
+        controlsRef.current.update();
+      }
+
+      // 数フレーム適用したら復元モードを終了
+      restoringFrameCountRef.current++;
+      if (restoringFrameCountRef.current > 5) {
+        setIsRestoringCamera(false);
+        restoringFrameCountRef.current = 0;
+        convertedStateRef.current = null;
+      }
+      return;
+    }
+
+    // 通常時はカメラ状態を保存（カメラタイプ固有の情報を含む）
+    const isPerspective = !(camera as any).isOrthographicCamera;
+    const target = controlsRef.current.target
+      ? new THREE.Vector3().copy(controlsRef.current.target)
+      : new THREE.Vector3(0, 0, 0);
+
+    cameraStateRef.current = {
+      position: camera.position.clone(),
+      up: camera.up.clone(),
+      quaternion: camera.quaternion.clone(),
+      target: target,
+      isPerspective: isPerspective,
+      perspFov: isPerspective ? (camera as THREE.PerspectiveCamera).fov : 0,
+      orthoZoom: !isPerspective ? (camera as THREE.OrthographicCamera).zoom : 0,
+    };
+  });
+
+  // カメラタイプが切り替わったときにスケール変換して復元モードを開始
+  useEffect(() => {
+    // 初回レンダリングはスキップ
+    if (previousCameraTypeRef.current === null) {
+      previousCameraTypeRef.current = usePerspective;
+      return;
+    }
+
+    // カメラタイプが変わっていない場合はスキップ
+    if (previousCameraTypeRef.current === usePerspective) {
+      return;
+    }
+
+    const prevWasPerspective = previousCameraTypeRef.current;
+    previousCameraTypeRef.current = usePerspective;
+
+    if (!cameraStateRef.current) return;
+    const saved = cameraStateRef.current;
+
+    if (prevWasPerspective && !usePerspective) {
+      // Perspective → Orthographic: 見た目のスケールを保持
+      // visibleHeight = 2 * distance * tan(fov/2) → orthoZoom = canvasHeight / visibleHeight
+      const distance = saved.position.distanceTo(saved.target);
+      const fovRad = (saved.perspFov * Math.PI) / 180;
+      let newZoom = orthoInitialZoomRef.current; // フォールバック
+      if (fovRad > 0 && distance > 0) {
+        const visibleHeight = 2 * distance * Math.tan(fovRad / 2);
+        newZoom = Math.max(0.01, canvasHeight / visibleHeight);
+      }
+      orthoInitialZoomRef.current = newZoom;
+
+      convertedStateRef.current = {
+        position: saved.position.clone(),
+        up: saved.up.clone(),
+        quaternion: saved.quaternion.clone(),
+        target: saved.target.clone(),
+        orthoZoom: newZoom,
+      };
+    } else if (!prevWasPerspective && usePerspective) {
+      // Orthographic → Perspective: 見た目のスケールを保持
+      // visibleHeight = canvasHeight / orthoZoom → distance = visibleHeight / (2 * tan(fov/2))
+      const fovRad = (fov * Math.PI) / 180;
+      let newDistance = saved.position.distanceTo(saved.target); // フォールバック
+      if (fovRad > 0 && saved.orthoZoom > 0) {
+        const visibleHeight = canvasHeight / saved.orthoZoom;
+        newDistance = visibleHeight / (2 * Math.tan(fovRad / 2));
+      }
+
+      const direction = new THREE.Vector3().subVectors(saved.position, saved.target).normalize();
+      // カメラがターゲット上にある場合のフォールバック
+      if (direction.lengthSq() < 0.0001) {
+        direction.set(0, 0, 1);
+      }
+
+      const newPosition = new THREE.Vector3()
+        .copy(saved.target)
+        .addScaledVector(direction, newDistance);
+
+      convertedStateRef.current = {
+        position: newPosition,
+        up: saved.up.clone(),
+        quaternion: saved.quaternion.clone(),
+        target: saved.target.clone(),
+        orthoZoom: 0,
+      };
+    }
+
+    if (convertedStateRef.current) {
+      restoringFrameCountRef.current = 0;
+      setIsRestoringCamera(true);
+    }
+  }, [usePerspective, cameraStateRef, fov, canvasHeight, orthoInitialZoomRef]);
+
+  return null;
 }
 
 // OrthographicCamera用のカスタムズームハンドラ
@@ -530,7 +695,7 @@ function VoxelMesh(props: VoxelMeshProps) {
 }
 
 export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
-  ({ voxelData, settings }, ref) => {
+  ({ voxelData, settings, onSaveColorSettings, onOpenSettings }, ref) => {
     // TrackballControlsのrefを作成
     const controlsRef = useRef<any>(null);
 
@@ -539,6 +704,17 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
     // 軸視点の状態を追跡（正方向=1, 負方向=-1）
     const axisViewState = useRef({ x: 1, y: 1, z: 1 });
+
+    // カメラ状態の保存用ref（カメラ切り替え時に状態を引き継ぐ）
+    const cameraStateRef = useRef<{
+      position: THREE.Vector3;
+      up: THREE.Vector3;
+      quaternion: THREE.Quaternion;
+      target: THREE.Vector3;
+      isPerspective: boolean;
+      perspFov: number;
+      orthoZoom: number;
+    } | null>(null);
 
     // 数値入力バッファ（スライス位置調整用）
     const [numericBuffer, setNumericBuffer] = useState<string>('');
@@ -600,6 +776,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       usePerspective: true,
       showScaleBar: true,
       showBoundingBox: false,
+      showGrid: true,
     });
 
     // Levaから独立した状態更新関数
@@ -619,6 +796,43 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       });
     }, []);
 
+    // クリップボードにカラー設定をコピー
+    const copyColorsToClipboard = useCallback(() => {
+      const colormap: Record<string, string> = {};
+      customColors.forEach((color, index) => {
+        colormap[index.toString()] = color;
+      });
+      const jsonString = JSON.stringify(colormap, null, 2);
+
+      navigator.clipboard.writeText(jsonString).then(
+        () => {
+          console.log('カラー設定をクリップボードにコピーしました');
+        },
+        (err) => {
+          console.error('クリップボードへのコピーに失敗しました:', err);
+        }
+      );
+    }, [customColors]);
+
+    // VSCodeの設定に保存
+    const saveColorsToSettings = useCallback(() => {
+      if (!onSaveColorSettings) return;
+
+      const colormap: Record<string, string> = {};
+      customColors.forEach((color, index) => {
+        colormap[index.toString()] = color;
+      });
+
+      onSaveColorSettings(colormap);
+      console.log('カラー設定をVSCodeの設定に保存しました');
+    }, [customColors, onSaveColorSettings]);
+
+    // VSCodeの設定を開く
+    const openSettingsPanel = useCallback(() => {
+      if (!onOpenSettings) return;
+      onOpenSettings();
+    }, [onOpenSettings]);
+
     // DPR管理
     const { width, height } = useWindowSize();
     const [currentDevicePixelRatio, setCurrentDevicePixelRatio] = useState(window.devicePixelRatio);
@@ -632,7 +846,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // ボクセルサイズに基づく動的な範囲を計算
     const { x, y, z } = voxelData.dimensions;
     const maxDim = Math.max(x, y, z);
-    const sliceRange = maxDim; // 原点を左下隅に変更: 0〜maxDim
+    const sliceRange = maxDim; // スライス範囲: 0〜maxDim（セル境界）
     const distanceRange = Math.ceil(maxDim * 2);
     const edgeMaxRange = Math.ceil(maxDim * 3);
 
@@ -748,6 +962,9 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         ),
         voxelColors: folder(
           {
+            'Copy Colors': button(() => copyColorsToClipboard()),
+            'Save to Settings': button(() => saveColorsToSettings()),
+            'Open Settings': button(() => openSettingsPanel()),
             // 0-15値制御を動的生成
             ...Array.from({ length: 16 }, (_, i) => i).reduce(
               (acc, i) => ({
@@ -802,16 +1019,30 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           {
             showScaleBar: { value: true, label: 'Scale Bar' },
             showBoundingBox: { value: false, label: 'Bounding Box' },
+            showGrid: { value: true, label: 'Grid' },
           },
           { collapsed: true }
         ),
       }),
-      [maxDpr, updateValueVisibility, updateCustomColor, sliceRange, distanceRange, edgeMaxRange]
+      [
+        maxDpr,
+        updateValueVisibility,
+        updateCustomColor,
+        sliceRange,
+        distanceRange,
+        edgeMaxRange,
+        copyColorsToClipboard,
+        saveColorsToSettings,
+        openSettingsPanel,
+      ]
     );
 
-    // 設定が変更されたらカスタム色を更新
+    // 初期化時のみ設定からカスタム色を読み込む
+    const initializedRef = useRef(false);
     useEffect(() => {
-      if (settings?.colormap) {
+      if (!initializedRef.current && settings?.colormap) {
+        initializedRef.current = true;
+
         setCustomColors((prev) => {
           const newColors = [...prev];
           // 設定オブジェクトから色を適用 (0-15)
@@ -850,6 +1081,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       edgeMaxDistance,
       showScaleBar,
       showBoundingBox,
+      showGrid,
     } = controls;
 
     // Clipping設定を取得
@@ -888,6 +1120,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         edgeMaxDistance: defaultValues.current.edgeMaxDistance,
         showScaleBar: defaultValues.current.showScaleBar,
         showBoundingBox: defaultValues.current.showBoundingBox,
+        showGrid: defaultValues.current.showGrid,
         ...voxelResetValues,
       });
 
@@ -1326,6 +1559,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             clearNumericBuffer();
             set({ showBoundingBox: !showBoundingBox });
             break;
+          case 'w':
+            clearNumericBuffer();
+            set({ showGrid: !showGrid });
+            break;
         }
       };
 
@@ -1335,6 +1572,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       enableEdgeHighlight,
       clippingMode,
       showBoundingBox,
+      showGrid,
       slicePosition1,
       slicePosition2,
       sliceRange,
@@ -1428,8 +1666,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // 自動計算されたfarとユーザー指定のfarの大きい方を使用
     const effectiveFar = Math.max(autoFar, far);
 
-    // モデル全体が画面に収まるカメラ初期位置を計算
-    const [cameraPosition] = useState((): [number, number, number] => {
+    // モデル全体が画面に収まるカメラ初期位置を計算（初回のみ使用）
+    const initialCameraPosition = useMemo(() => {
       const { x, y, z } = voxelData.dimensions;
       // バウンディングスフィアの半径
       const radius = Math.sqrt(x * x + y * y + z * z) / 2;
@@ -1438,8 +1676,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       const distance = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
       // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
       const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
-      return [dir.x * distance, dir.y * distance, dir.z * distance];
-    });
+      return new THREE.Vector3(dir.x * distance, dir.y * distance, dir.z * distance);
+    }, [voxelData.dimensions]);
 
     // OrthographicCamera用の初期ズーム値を計算
     const orthoInitialZoomRef = useRef<number>(0);
@@ -1452,6 +1690,18 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       const zoom = Math.min(width, height) / (maxDim * 1.4);
       orthoInitialZoomRef.current = Math.max(0.1, zoom);
     }, [voxelData.dimensions, width, height]);
+
+    // Perspective→Orthographic切り替え時: 見た目のスケールが一致するzoomを事前計算
+    // レンダーフェーズで計算することで、OrthoZoomHandlerのuseEffectより先に値が設定される
+    if (!usePerspective && cameraStateRef.current && cameraStateRef.current.isPerspective) {
+      const saved = cameraStateRef.current;
+      const distance = saved.position.distanceTo(saved.target);
+      const fovRad = (saved.perspFov * Math.PI) / 180;
+      if (fovRad > 0 && distance > 0) {
+        const visibleHeight = 2 * distance * Math.tan(fovRad / 2);
+        orthoInitialZoomRef.current = Math.max(0.01, height / visibleHeight);
+      }
+    }
 
     // DPR変化の監視
     useEffect(() => {
@@ -1572,7 +1822,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           {usePerspective ? (
             <PerspectiveCamera
               makeDefault
-              position={cameraPosition}
+              position={initialCameraPosition}
               up={[0, 0, 1]}
               fov={fov}
               far={effectiveFar}
@@ -1580,7 +1830,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           ) : (
             <OrthographicCamera
               makeDefault
-              position={cameraPosition}
+              position={initialCameraPosition}
               up={[0, 0, 1]}
               zoom={orthoInitialZoomRef.current}
               near={0.1}
@@ -1589,6 +1839,15 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           )}
 
           {!usePerspective && <OrthoZoomHandler initialZoomRef={orthoInitialZoomRef} />}
+
+          <CameraStateManager
+            cameraStateRef={cameraStateRef}
+            controlsRef={controlsRef}
+            usePerspective={usePerspective}
+            fov={fov}
+            canvasHeight={height}
+            orthoInitialZoomRef={orthoInitialZoomRef}
+          />
 
           <CaptureHelper captureRef={captureRef} />
 
@@ -1643,11 +1902,13 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             <ScaleBar dimensions={voxelData.dimensions} voxelLength={voxelData.voxelLength} />
           )}
 
-          <gridHelper
-            args={[Math.max(voxelData.dimensions.x, voxelData.dimensions.y) * 3, 10]}
-            position={[0, 0, Number((-voxelData.dimensions.z / 2) * 1.1)]}
-            rotation={[Math.PI / 2, 0, 0]}
-          />
+          {showGrid && (
+            <gridHelper
+              args={[Math.max(voxelData.dimensions.x, voxelData.dimensions.y) * 3, 10]}
+              position={[0, 0, Number((-voxelData.dimensions.z / 2) * 1.1)]}
+              rotation={[Math.PI / 2, 0, 0]}
+            />
+          )}
 
           <Stats />
           <GizmoHelper alignment="bottom-right" margin={[80, 80]}>

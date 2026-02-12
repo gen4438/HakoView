@@ -31,7 +31,9 @@ export type WebviewToExtensionMessage =
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
   | { command: 'reportMetrics'; metrics: RenderingMetrics }
-  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string };
+  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string }
+  | { command: 'saveColorSettings'; colormap: Record<string, string> }
+  | { command: 'openSettings' };
 
 /**
  * ボクセルデータメッセージ（postMessage用）

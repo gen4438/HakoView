@@ -349,6 +349,27 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             vscode.window.showErrorMessage(errorMessage);
           }
           break;
+
+        case 'saveColorSettings':
+          // カラー設定をVSCodeの設定に保存
+          try {
+            const config = vscode.workspace.getConfiguration('hakoview');
+            await config.update(
+              'defaultColormap',
+              message.colormap,
+              vscode.ConfigurationTarget.Global
+            );
+            vscode.window.showInformationMessage('カラー設定を保存しました');
+          } catch (error) {
+            const errorMessage = `カラー設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+            vscode.window.showErrorMessage(errorMessage);
+          }
+          break;
+
+        case 'openSettings':
+          // VSCodeの設定を開く（hakoviewの設定にフォーカス）
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'hakoview');
+          break;
       }
     });
   }

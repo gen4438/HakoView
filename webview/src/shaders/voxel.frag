@@ -24,6 +24,7 @@ uniform float uEdgeFadeStart; // エッジフェード開始距離
 uniform float uEdgeFadeEnd; // エッジフェード終了距離
 uniform mat4 uModelMatrixInverse;
 uniform float uValueVisibility[16]; // 各ボクセル値の表示フラグ (0.0=非表示, 1.0=表示)
+uniform float uIsOrthographic; // 0.0=perspective, 1.0=orthographic
 
 varying vec3 vOrigin;
 varying vec3 vDirection;
@@ -31,7 +32,10 @@ varying vec3 vModelPosition;
 
 vec3 applyEdgeHighlight(vec3 color, vec3 realPosition, vec3 normal) {
     if (uEnableEdgeHighlight < 0.5) return color;
-    float distanceFromCamera = length(vOrigin - realPosition);
+    // Orthographicの場合はカメラ位置から距離を計算
+    float distanceFromCamera = uIsOrthographic > 0.5
+        ? length(cameraPosition - realPosition)
+        : length(vOrigin - realPosition);
     if (distanceFromCamera >= uEdgeFadeEnd) return color;
 
     vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
@@ -284,7 +288,10 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 
         // シェーディングへ（既存の後段を流用）
         vec3 realPosition = originWS + directionWS * hitDistance;
-        vec3 lightDir = normalize(vOrigin - realPosition);
+        // Orthographicの場合はカメラ位置を使用
+        vec3 lightDir = uIsOrthographic > 0.5
+            ? normalize(cameraPosition - realPosition)
+            : normalize(vOrigin - realPosition);
         float diff = max(dot(n, lightDir), 0.0);
 
         float lighting = uAmbientIntensity + uLightIntensity * diff;
@@ -354,7 +361,10 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             vec4  voxel       = startedVoxel;
 
             vec3 realPosition = originWS + directionWS * hitDistance;
-            vec3 lightDir = normalize(vOrigin - realPosition);
+            // Orthographicの場合はカメラ位置を使用
+            vec3 lightDir = uIsOrthographic > 0.5
+                ? normalize(cameraPosition - realPosition)
+                : normalize(vOrigin - realPosition);
             float diff = max(dot(n, lightDir), 0.0);
             float lighting = uAmbientIntensity + uLightIntensity * diff;
             vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, n);
@@ -366,8 +376,10 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     }
 
     vec3 realPosition = originWS + directionWS * hitDistance;
-    // カメラ位置 (vOrigin) からヒット位置へ向かうベクトルをライト方向として計算
-    vec3 lightDir = normalize(vOrigin - realPosition);
+    // Orthographicの場合はカメラ位置を使用、Perspectiveの場合はvOriginを使用
+    vec3 lightDir = uIsOrthographic > 0.5
+        ? normalize(cameraPosition - realPosition)
+        : normalize(vOrigin - realPosition);
     float diff = max(dot(hitNormal, lightDir), 0.0);
 
     // ライティング計算：環境光 + 拡散光
@@ -377,7 +389,9 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 }
 
 void main() {
-    // ★ 頂点で渡した vDirection は使わず、ピクセルの視点方向を毎回算出する
+    // orthographicとperspectiveの両方で同じ計算方法を使用
+    // 頂点シェーダーでvOriginが適切に設定されているため、
+    // vModelPosition - vOriginは両方のカメラタイプで正しいレイ方向を提供する
     vec3 dirWS = normalize(vModelPosition - vOrigin);
 
     // ゼロ除算の保険（ほぼ無いが念のため）

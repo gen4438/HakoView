@@ -175,6 +175,25 @@ export function useExtensionMessage() {
     });
   };
 
+  /**
+   * カラー設定を保存
+   */
+  const saveColorSettings = (colormap: Record<string, string>) => {
+    postMessage({
+      command: 'saveColorSettings',
+      colormap,
+    });
+  };
+
+  /**
+   * 設定を開く
+   */
+  const openSettings = () => {
+    postMessage({
+      command: 'openSettings',
+    });
+  };
+
   return {
     voxelData,
     settings,
@@ -186,5 +205,7 @@ export function useExtensionMessage() {
     openAsText,
     reportError,
     saveImage,
+    saveColorSettings,
+    openSettings,
   };
 }
