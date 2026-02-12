@@ -9,11 +9,14 @@ export interface ImageSize {
 interface SaveImageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (size: ImageSize) => void;
+  onSave: (size: ImageSize, preset: string, customWidth: string, customHeight: string) => void;
   currentViewSize: { width: number; height: number };
+  initialPreset?: string;
+  initialCustomWidth?: string;
+  initialCustomHeight?: string;
 }
 
-const PRESET_SIZES: ImageSize[] = [
+export const PRESET_SIZES: ImageSize[] = [
   { width: 1920, height: 1080, label: 'Full HD (1920×1080)' },
   { width: 2560, height: 1440, label: '2K (2560×1440)' },
   { width: 3840, height: 2160, label: '4K (3840×2160)' },
@@ -25,19 +28,22 @@ export const SaveImageModal: React.FC<SaveImageModalProps> = ({
   onClose,
   onSave,
   currentViewSize,
+  initialPreset = 'current',
+  initialCustomWidth = '1920',
+  initialCustomHeight = '1080',
 }) => {
-  const [selectedPreset, setSelectedPreset] = useState<string>('current');
-  const [customWidth, setCustomWidth] = useState<string>('1920');
-  const [customHeight, setCustomHeight] = useState<string>('1080');
+  const [selectedPreset, setSelectedPreset] = useState<string>(initialPreset);
+  const [customWidth, setCustomWidth] = useState<string>(initialCustomWidth);
+  const [customHeight, setCustomHeight] = useState<string>(initialCustomHeight);
 
-  // モーダルが開いたときにカスタムサイズをリセット
+  // モーダルが開いたときに初期値を反映
   useEffect(() => {
     if (isOpen) {
-      setSelectedPreset('current');
-      setCustomWidth('1920');
-      setCustomHeight('1080');
+      setSelectedPreset(initialPreset);
+      setCustomWidth(initialCustomWidth);
+      setCustomHeight(initialCustomHeight);
     }
-  }, [isOpen]);
+  }, [isOpen, initialPreset, initialCustomWidth, initialCustomHeight]);
 
   const handleSave = () => {
     let size: ImageSize;
@@ -73,7 +79,7 @@ export const SaveImageModal: React.FC<SaveImageModalProps> = ({
       size = preset;
     }
 
-    onSave(size);
+    onSave(size, selectedPreset, customWidth, customHeight);
     onClose();
   };
 
