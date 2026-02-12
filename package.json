@@ -2,7 +2,7 @@
   "name": "hakoview",
   "displayName": "Hako View",
   "description": "A lightweight Voxel model visualizer for VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "icon": "images/icon.png",
   "repository": {
     "type": "git",
