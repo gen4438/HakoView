@@ -37,9 +37,6 @@ const VoxelShaderMaterial = shaderMaterial(
     uTexture: null,
     uPaletteTexture: null,
     uPaletteSize: 16,
-    uOccupancyTexture: null,
-    uOccupancyDimensions: new THREE.Vector3(0, 0, 0),
-    uBlockSize: 8,
     uModelMatrixInverse: new THREE.Matrix4(),
     uClippingPlane: new THREE.Vector4(0, 1, 0, 0),
     uEnableClipping: 0.0,
@@ -370,53 +367,6 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [voxelData]);
 
-  // Occupancy Grid テクスチャ作成（空間スキップ用）
-  const occupancyData = useMemo(() => {
-    const { dimensions, values } = voxelData;
-    const blockSize = 8;
-    const occX = Math.ceil(dimensions.x / blockSize);
-    const occY = Math.ceil(dimensions.y / blockSize);
-    const occZ = Math.ceil(dimensions.z / blockSize);
-    const occData = new Uint8Array(occX * occY * occZ);
-    const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
-
-    for (let bx = 0; bx < occX; bx++) {
-      const xStart = bx * blockSize;
-      const xEnd = Math.min(xStart + blockSize, dimensions.x);
-      for (let by = 0; by < occY; by++) {
-        const yStart = by * blockSize;
-        const yEnd = Math.min(yStart + blockSize, dimensions.y);
-        for (let bz = 0; bz < occZ; bz++) {
-          const zStart = bz * blockSize;
-          const zEnd = Math.min(zStart + blockSize, dimensions.z);
-          let occupied = false;
-          for (let x = xStart; x < xEnd && !occupied; x++) {
-            for (let y = yStart; y < yEnd && !occupied; y++) {
-              const rowBase = (x * dimensions.y + y) * dimensions.z;
-              for (let z = zStart; z < zEnd; z++) {
-                if (uint8Array[rowBase + z] !== 0) {
-                  occupied = true;
-                  break;
-                }
-              }
-            }
-          }
-          occData[bx + occX * (by + occY * bz)] = occupied ? 255 : 0;
-        }
-      }
-    }
-
-    const texture = new THREE.Data3DTexture(occData, occX, occY, occZ);
-    texture.format = THREE.RedFormat;
-    texture.type = THREE.UnsignedByteType;
-    texture.minFilter = THREE.NearestFilter;
-    texture.magFilter = THREE.NearestFilter;
-    texture.unpackAlignment = 1;
-    texture.needsUpdate = true;
-
-    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ) };
-  }, [voxelData]);
-
   // パレットテクスチャ作成（カスタム色対応）
   const paletteTexture = useMemo(() => {
     const paletteSize = 16;
@@ -455,12 +405,6 @@ function VoxelMesh(props: VoxelMeshProps) {
 
   useEffect(() => {
     return () => {
-      occupancyData.texture.dispose();
-    };
-  }, [occupancyData]);
-
-  useEffect(() => {
-    return () => {
       paletteTexture.dispose();
     };
   }, [paletteTexture]);
@@ -475,10 +419,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uTexture.value = dataTexture;
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-    u.uOccupancyTexture.value = occupancyData.texture;
-    u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
-    u.uBlockSize.value = 8;
-  }, [voxelData, dataTexture, paletteTexture, occupancyData]);
+  }, [voxelData, dataTexture, paletteTexture]);
 
   // Levaコントロールの値が変更されたときにuniformsを直接更新
   useEffect(() => {
