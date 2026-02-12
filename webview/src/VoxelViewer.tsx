@@ -2,11 +2,20 @@ import React, { useCallback, useState } from 'react';
 import { useExtensionMessage } from './hooks/useExtensionMessage';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { LoadingState } from './components/LoadingState';
+import { HeaderInfo } from './components/HeaderInfo';
 import { VoxelRenderer } from './VoxelRenderer';
 
 export const VoxelViewer: React.FC = () => {
-  const { voxelData, settings, error, isLoading, loadFile, loadFileFromPath, reportError } =
-    useExtensionMessage();
+  const {
+    voxelData,
+    settings,
+    error,
+    isLoading,
+    loadFile,
+    loadFileFromPath,
+    openAsText,
+    reportError,
+  } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -167,6 +176,7 @@ export const VoxelViewer: React.FC = () => {
     >
       {dropOverlay}
       {voxelData && <VoxelRenderer voxelData={voxelData} settings={settings} />}
+      {voxelData && <HeaderInfo voxelData={voxelData} onOpenAsText={openAsText} />}
     </div>
   );
 };
