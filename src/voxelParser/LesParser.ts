@@ -121,32 +121,82 @@ export class LesParser {
     const totalVoxels = getTotalVoxels(dimensions);
     const values = new Uint8Array(totalVoxels);
 
-    // 各行をパース
+    // 各行をパース（最適化版：手動スキャン）
     for (let rowIndex = 0; rowIndex < expectedRows; rowIndex++) {
-      const line = dataLines[rowIndex].trim();
-      const rowValues = line.split(/\s+/);
-
-      // 行の値数検証
-      validateRowLength(rowIndex, rowValues.length, z);
+      const line = dataLines[rowIndex];
 
       // Row i corresponds to (x, y) = (i÷Y, i%Y)
       const xCoord = Math.floor(rowIndex / y);
       const yCoord = rowIndex % y;
 
-      // 各値をパース
-      for (let colIndex = 0; colIndex < z; colIndex++) {
-        const valueStr = rowValues[colIndex];
-        const value = parseInt(valueStr, 10);
+      // 手動スキャンで数値を抽出（split不要、高速化）
+      let colIndex = 0;
+      let currentValue = 0;
+      let hasValue = false;
+      const lineLength = line.length;
 
-        // 値検証
-        validateVoxelValue(value, rowIndex, colIndex);
+      for (let i = 0; i < lineLength; i++) {
+        const char = line.charCodeAt(i);
 
-        // 1次元配列に格納
-        // Three.js Data3DTexture expects: index = x + X * (y + Y * z)
+        // 数字（0-9）の場合: charCode 48-57
+        if (char >= 48 && char <= 57) {
+          currentValue = currentValue * 10 + (char - 48);
+          hasValue = true;
+        }
+        // 空白文字（space, tab, cr, lf）の場合
+        else if (char === 32 || char === 9 || char === 13 || char === 10) {
+          if (hasValue) {
+            // 数値の終わり - 値を格納
+            if (colIndex >= z) {
+              throw new ParseError(
+                `Row ${rowIndex + 1} has too many values. Expected ${z} values.`,
+                rowIndex + 2
+              );
+            }
+
+            // 値検証
+            validateVoxelValue(currentValue, rowIndex, colIndex);
+
+            // 1次元配列に格納
+            // Three.js Data3DTexture expects: index = x + X * (y + Y * z)
+            const zCoord = colIndex;
+            const index = xCoord + x * (yCoord + y * zCoord);
+            values[index] = currentValue;
+
+            colIndex++;
+            currentValue = 0;
+            hasValue = false;
+          }
+        }
+        // その他の文字（無効）
+        else {
+          throw new ParseError(
+            `Invalid character at row ${rowIndex + 1}, position ${i + 1}: "${line[i]}"`,
+            rowIndex + 2
+          );
+        }
+      }
+
+      // 行末の最後の数値を処理
+      if (hasValue) {
+        if (colIndex >= z) {
+          throw new ParseError(
+            `Row ${rowIndex + 1} has too many values. Expected ${z} values.`,
+            rowIndex + 2
+          );
+        }
+
+        validateVoxelValue(currentValue, rowIndex, colIndex);
+
         const zCoord = colIndex;
         const index = xCoord + x * (yCoord + y * zCoord);
-        values[index] = value;
+        values[index] = currentValue;
+
+        colIndex++;
       }
+
+      // 行の値数検証
+      validateRowLength(rowIndex, colIndex, z);
     }
 
     return values;
