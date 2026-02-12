@@ -18,6 +18,8 @@ export const VoxelViewer: React.FC = () => {
     openAsText,
     reportError,
     saveImage,
+    saveColorSettings,
+    openSettings,
   } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -293,7 +295,15 @@ export const VoxelViewer: React.FC = () => {
       }}
     >
       {dropOverlay}
-      {voxelData && <VoxelRenderer ref={rendererRef} voxelData={voxelData} settings={settings} />}
+      {voxelData && (
+        <VoxelRenderer
+          ref={rendererRef}
+          voxelData={voxelData}
+          settings={settings}
+          onSaveColorSettings={saveColorSettings}
+          onOpenSettings={openSettings}
+        />
+      )}
       {voxelData && (
         <>
           <HeaderInfo

@@ -96,21 +96,31 @@
             "15": "#17BECF"
           },
           "description": "Default colormap for voxel values. Format: { \"0\": \"#hexcolor\", \"1\": \"#hexcolor\", ... }."
+        },
+        "hakoview.devicePixelRatio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 0.5,
+          "maximum": 4,
+          "description": "Device Pixel Ratio (DPR) for rendering. Higher values improve quality but reduce performance. Set to null for auto-detection (recommended). Typical values: 1.0 (standard), 2.0 (high-DPI), 0.5-1.0 (low-spec machines)."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run package",
-    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js && node esbuild.webview.js",
+    "vscode:prepublish": "pnpm run build:prod",
+    "build": "pnpm run check-types && pnpm run lint && node esbuild.js && node esbuild.webview.js",
+    "build:prod": "pnpm run check-types && pnpm run lint && node esbuild.js --production && node esbuild.webview.js --production",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:webview": "node esbuild.webview.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production && node esbuild.webview.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "pretest": "pnpm run compile-tests && pnpm run build && pnpm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,md}\" \"webview/src/**/*.{ts,tsx,js,jsx,json,md,css}\"",
@@ -118,7 +128,7 @@
     "test": "vscode-test",
     "install:webview": "cd webview && pnpm install",
     "prepare": "husky",
-    "vsix": "pnpm run package && vsce package --out dist/hakoview.vsix --allow-missing-repository",
+    "vsix": "pnpm run build:prod && vsce package --out dist/hakoview.vsix --allow-missing-repository",
     "publish:marketplace": "vsce publish --allow-missing-repository",
     "publish:openvsx": "ovsx publish --allow-missing-repository",
     "publish": "pnpm run vsix && pnpm run publish:marketplace && pnpm run publish:openvsx",

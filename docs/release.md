@@ -141,7 +141,7 @@ VSIXに含まれるもの:
 ### VSIXパッケージが失敗する
 
 - `.vscodeignore` の問題のあるパターンを確認
-- `pnpm run package` を実行してビルドが成功することを確認
+- `pnpm run build:prod` を実行してビルドが成功することを確認
 - node_modules内のシンボリックリンクを確認（pnpmはシンボリックリンクを使用）
 
 ### マーケットプレイス公開が失敗する

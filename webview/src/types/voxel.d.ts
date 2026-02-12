@@ -13,11 +13,13 @@ export interface Dimensions {
 
 /**
  * Extension→Webviewに送信されるボクセルデータ
+ * Note: postMessageの構造化クローンはUint8Arrayをサポートしているため、
+ * 大きなデータセットでもメモリ効率よく送信できます
  */
 export interface VoxelDataMessage {
   dimensions: Dimensions;
   voxelLength: number;
-  values: number[]; // Uint8Array → Array変換（postMessage対応）
+  values: Uint8Array | number[]; // postMessageで直接Uint8Arrayを送信可能
   fileName: string;
   filePath?: string;
 }
@@ -43,6 +45,7 @@ export interface ViewerSettings {
     distance: number;
   };
   colormap?: Record<string, string>;
+  devicePixelRatio?: number | null;
 }
 
 /**
@@ -108,4 +111,6 @@ export type WebviewMessage =
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
   | { command: 'reportMetrics'; metrics: RenderingMetrics }
-  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string };
+  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string }
+  | { command: 'saveColorSettings'; colormap: Record<string, string> }
+  | { command: 'openSettings' };

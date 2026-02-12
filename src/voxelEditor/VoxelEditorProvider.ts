@@ -86,6 +86,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
     try {
       console.log('Resolving custom editor for:', document.uri.toString());
 
+      // Webviewパネルのタイトルを設定
+      const fileName = document.uri.path.split('/').pop() || 'Voxel Viewer';
+      webviewPanel.title = fileName;
+
       // Webviewオプション設定
       webviewPanel.webview.options = {
         enableScripts: true,
@@ -189,11 +193,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   private sendSettings(webview: vscode.Webview): void {
     const config = vscode.workspace.getConfiguration('hakoview');
     const colormap = config.get<Record<string, string>>('defaultColormap');
+    const devicePixelRatio = config.get<number | null>('devicePixelRatio');
 
     postMessageToWebview(webview, {
       type: 'updateSettings',
       settings: {
         colormap,
+        devicePixelRatio,
       },
     });
   }
@@ -204,7 +210,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   private setupMessageHandling(document: VoxelDocument, webviewPanel: vscode.WebviewPanel): void {
     // 設定変更の監視
     const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('hakoview.defaultColormap')) {
+      if (
+        e.affectsConfiguration('hakoview.defaultColormap') ||
+        e.affectsConfiguration('hakoview.devicePixelRatio')
+      ) {
         this.sendSettings(webviewPanel.webview);
       }
     });
@@ -339,6 +348,27 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             const errorMessage = `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
             vscode.window.showErrorMessage(errorMessage);
           }
+          break;
+
+        case 'saveColorSettings':
+          // カラー設定をVSCodeの設定に保存
+          try {
+            const config = vscode.workspace.getConfiguration('hakoview');
+            await config.update(
+              'defaultColormap',
+              message.colormap,
+              vscode.ConfigurationTarget.Global
+            );
+            vscode.window.showInformationMessage('カラー設定を保存しました');
+          } catch (error) {
+            const errorMessage = `カラー設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+            vscode.window.showErrorMessage(errorMessage);
+          }
+          break;
+
+        case 'openSettings':
+          // VSCodeの設定を開く（hakoviewの設定にフォーカス）
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'hakoview');
           break;
       }
     });

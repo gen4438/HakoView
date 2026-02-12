@@ -47,7 +47,7 @@ jobs:
         run: cd webview && pnpm install --frozen-lockfile
 
       - name: Build extension
-        run: pnpm run package
+        run: pnpm run build:prod
 
       - name: Package VSIX for ${{ matrix.target }}
         run: pnpm exec vsce package --target ${{ matrix.target }} --out dist/hakoview-${{ matrix.target }}.vsix --allow-missing-repository

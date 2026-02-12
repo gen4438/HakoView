@@ -17,6 +17,7 @@ export type ExtensionToWebviewMessage =
  */
 export interface ViewerSettings {
   colormap?: Record<string, string>;
+  devicePixelRatio?: number | null;
 }
 
 /**
@@ -30,15 +31,19 @@ export type WebviewToExtensionMessage =
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
   | { command: 'reportMetrics'; metrics: RenderingMetrics }
-  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string };
+  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string }
+  | { command: 'saveColorSettings'; colormap: Record<string, string> }
+  | { command: 'openSettings' };
 
 /**
- * ボクセルデータメッセージ（postMessage用にUint8Array→Array変換）
+ * ボクセルデータメッセージ（postMessage用）
+ * Note: Uint8ArrayはpostMessageの構造化クローンでサポートされているため、
+ * 大きなデータセットでも効率的に送信できます
  */
 export interface VoxelDataMessage {
   dimensions: { x: number; y: number; z: number };
   voxelLength: number;
-  values: number[];
+  values: Uint8Array | number[];
   fileName: string;
   filePath?: string;
 }
@@ -77,12 +82,14 @@ export interface RenderingMetrics {
 
 /**
  * VoxelDatasetをpostMessage用に変換
+ * Note: Uint8Arrayをそのまま送信することで、大きなデータセット（例：600³）でも
+ * メモリ効率よく送信できます。postMessageの構造化クローンがUint8Arrayをサポートしています。
  */
 export function convertToMessage(dataset: VoxelDataset): VoxelDataMessage {
   return {
     dimensions: dataset.dimensions,
     voxelLength: dataset.voxelLength,
-    values: Array.from(dataset.values),
+    values: dataset.values, // Uint8Arrayをそのまま送信
     fileName: dataset.fileName,
     filePath: dataset.filePath,
   };
