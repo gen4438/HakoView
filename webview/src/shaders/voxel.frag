@@ -32,11 +32,16 @@ varying vec3 vModelPosition;
 
 vec3 applyEdgeHighlight(vec3 color, vec3 realPosition, vec3 normal) {
     if (uEnableEdgeHighlight < 0.5) return color;
-    // Orthographicの場合はカメラ位置から距離を計算
-    float distanceFromCamera = uIsOrthographic > 0.5
-        ? length(cameraPosition - realPosition)
-        : length(vOrigin - realPosition);
-    if (distanceFromCamera >= uEdgeFadeEnd) return color;
+
+    // Orthographicではスケールが距離に依存しないため距離フェードをスキップ
+    float fade = 1.0;
+    if (uIsOrthographic < 0.5) {
+        float distanceFromCamera = length(vOrigin - realPosition);
+        if (distanceFromCamera >= uEdgeFadeEnd) return color;
+        fade = (uEdgeFadeEnd > uEdgeFadeStart)
+            ? 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera)
+            : 1.0;
+    }
 
     vec3 objPos = (uModelMatrixInverse * vec4(realPosition, 1.0)).xyz;
     vec3 hOdd = 0.5 * mod(uVoxelShape, 2.0);
@@ -49,9 +54,6 @@ vec3 applyEdgeHighlight(vec3 color, vec3 realPosition, vec3 normal) {
 
     if (!any(lessThan(edgeDists, vec2(uEdgeThickness)))) return color;
 
-    float fade = (uEdgeFadeEnd > uEdgeFadeStart)
-        ? 1.0 - smoothstep(uEdgeFadeStart, uEdgeFadeEnd, distanceFromCamera)
-        : 1.0;
     return mix(color, uEdgeColor, uEdgeIntensity * fade);
 }
 
