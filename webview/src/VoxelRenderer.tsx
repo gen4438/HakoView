@@ -1040,10 +1040,27 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           return;
         }
 
-        // 小文字のキー（x, y, z - 軸視点切り替え）
+        // Backspaceキーで数値バッファの最後の文字を削除
+        if (key === 'Backspace' && numericBuffer) {
+          event.preventDefault();
+          setNumericBuffer(numericBuffer.slice(0, -1));
+          resetNumericBufferTimeout();
+          return;
+        }
+
+        // 小文字のキー（x, y, z - 軸視点切り替え、またはsxでスライス軸切り替え）
         if (key === 'x' || key === 'y' || key === 'z') {
-          clearNumericBuffer();
-          setAxisView(key);
+          // Sliceモード かつ lastKeyが's'の場合はスライス軸を切り替え
+          if (clippingMode === 'Slice' && lastKeyRef.current === 's') {
+            const axisMap = { x: 'X' as const, y: 'Y' as const, z: 'Z' as const };
+            setClipping({ sliceAxis: axisMap[key] });
+            lastKeyRef.current = '';
+            clearNumericBuffer();
+          } else {
+            // 通常の軸視点切り替え
+            clearNumericBuffer();
+            setAxisView(key);
+          }
           return;
         }
 
@@ -1119,10 +1136,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             return;
           }
 
-          // "g": 対象スライスをジャンプ、または"gg"で最大位置
+          // "g": 数値バッファありで現在選択中のスライスをジャンプ、"gg"で両スライスを距離保持で+側max移動
           if (key === 'g') {
             if (numericBuffer) {
-              // 数値バッファがある場合はジャンプ
+              // "10g": 現在選択中のスライスを指定位置に移動
               const targetPosition = parseInt(numericBuffer, 10);
               if (!isNaN(targetPosition)) {
                 const clampedPosition = Math.max(0, Math.min(targetPosition, sliceRange));
@@ -1134,13 +1151,21 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               }
               clearNumericBuffer();
             } else if (lastKeyRef.current === 'g') {
-              // "gg": 最大位置に移動
-              if (activeSlice === 1) {
-                setClipping({ slicePosition1: sliceRange });
+              // "gg": 両スライスを距離保持で+側がmaxになるように移動
+              const maxSlice = Math.max(slicePosition1, slicePosition2);
+              const minSlice = Math.min(slicePosition1, slicePosition2);
+              const distance = maxSlice - minSlice;
+              const newMax = sliceRange;
+              const newMin = Math.max(0, newMax - distance);
+
+              // どちらがmaxだったかを判定して適切に設定
+              if (slicePosition1 > slicePosition2) {
+                setClipping({ slicePosition1: newMax, slicePosition2: newMin });
               } else {
-                setClipping({ slicePosition2: sliceRange });
+                setClipping({ slicePosition1: newMin, slicePosition2: newMax });
               }
               lastKeyRef.current = '';
+              clearNumericBuffer();
             } else {
               // 最初の"g"を記録
               lastKeyRef.current = 'g';
@@ -1154,14 +1179,54 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             return;
           }
 
-          // "G": 対象スライスを最小位置に移動
+          // "G": 数値バッファありで中心を指定位置に移動、なしで両スライスを距離保持で-側min移動
           if (key === 'G') {
-            clearNumericBuffer();
-            if (activeSlice === 1) {
-              setClipping({ slicePosition1: 0 });
+            if (numericBuffer) {
+              // "10G": slice1/2の中心を指定位置に移動（距離保持）
+              const targetCenter = parseInt(numericBuffer, 10);
+              if (!isNaN(targetCenter)) {
+                const distance = Math.abs(slicePosition1 - slicePosition2);
+                const halfDistance = distance / 2;
+
+                let newSlice1 = targetCenter - halfDistance;
+                let newSlice2 = targetCenter + halfDistance;
+
+                // 範囲チェックして調整
+                if (newSlice1 < 0) {
+                  newSlice1 = 0;
+                  newSlice2 = distance;
+                } else if (newSlice2 > sliceRange) {
+                  newSlice2 = sliceRange;
+                  newSlice1 = sliceRange - distance;
+                }
+
+                // 範囲内にクランプ
+                newSlice1 = Math.max(0, Math.min(newSlice1, sliceRange));
+                newSlice2 = Math.max(0, Math.min(newSlice2, sliceRange));
+
+                // slice1とslice2の大小関係を保つ
+                if (slicePosition1 < slicePosition2) {
+                  setClipping({ slicePosition1: newSlice1, slicePosition2: newSlice2 });
+                } else {
+                  setClipping({ slicePosition1: newSlice2, slicePosition2: newSlice1 });
+                }
+              }
             } else {
-              setClipping({ slicePosition2: 0 });
+              // "G": 両スライスを距離保持で-側がminになるように移動
+              const maxSlice = Math.max(slicePosition1, slicePosition2);
+              const minSlice = Math.min(slicePosition1, slicePosition2);
+              const distance = maxSlice - minSlice;
+              const newMin = 0;
+              const newMax = Math.min(sliceRange, newMin + distance);
+
+              // どちらがminだったかを判定
+              if (slicePosition1 < slicePosition2) {
+                setClipping({ slicePosition1: newMin, slicePosition2: newMax });
+              } else {
+                setClipping({ slicePosition1: newMax, slicePosition2: newMin });
+              }
             }
+            clearNumericBuffer();
             return;
           }
 
@@ -1205,6 +1270,18 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               slicePosition1: Math.floor(sliceRange / 2),
               slicePosition2: 0,
             });
+            return;
+          }
+
+          // "s": 次にx/y/zでスライス軸切り替え
+          if (key === 's') {
+            lastKeyRef.current = 's';
+            if (lastKeyTimeoutRef.current !== null) {
+              window.clearTimeout(lastKeyTimeoutRef.current);
+            }
+            lastKeyTimeoutRef.current = window.setTimeout(() => {
+              lastKeyRef.current = '';
+            }, 1000);
             return;
           }
         }
@@ -1567,8 +1644,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           )}
 
           <gridHelper
-            args={[100, 10]}
-            position={[0, 0, -voxelData.dimensions.z / 2 - 5]}
+            args={[Math.max(voxelData.dimensions.x, voxelData.dimensions.y) * 3, 10]}
+            position={[0, 0, Number((-voxelData.dimensions.z / 2) * 1.1)]}
             rotation={[Math.PI / 2, 0, 0]}
           />
 
