@@ -34,6 +34,7 @@ const VoxelShaderMaterial = shaderMaterial(
     uModelMatrixInverse: new THREE.Matrix4(),
     uClippingPlane: new THREE.Vector4(0, 1, 0, 0),
     uEnableClipping: 0.0,
+    uIsOrthographic: 0.0,
     uCameraDistance: 0.0,
     uEnableEdgeHighlight: 0.0,
     uEdgeThickness: 0.05,
@@ -61,6 +62,40 @@ declare module 'react' {
 
 interface VoxelRendererProps {
   voxelData: VoxelDataMessage;
+}
+
+// OrthographicCamera用のカスタムズームハンドラ
+// TrackballControlsはOrthoCameraのzoomプロパティを正しく制御しないため、
+// wheelイベントで直接camera.zoomを変更する
+function OrthoZoomHandler({ initialZoomRef }: { initialZoomRef: React.MutableRefObject<number> }) {
+  const { camera, gl, size } = useThree();
+
+  // 初期ズームをビューポートとモデルサイズに基づいて設定
+  useEffect(() => {
+    if (!(camera as any).isOrthographicCamera) return;
+    const orthoCamera = camera as THREE.OrthographicCamera;
+    orthoCamera.zoom = initialZoomRef.current;
+    orthoCamera.updateProjectionMatrix();
+  }, [camera, initialZoomRef, size]);
+
+  // ホイールイベントでzoomを直接制御
+  useEffect(() => {
+    if (!(camera as any).isOrthographicCamera) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const orthoCamera = camera as THREE.OrthographicCamera;
+      // deltaY > 0 でズームアウト、< 0 でズームイン
+      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      orthoCamera.zoom = Math.max(0.01, orthoCamera.zoom * zoomFactor);
+      orthoCamera.updateProjectionMatrix();
+    };
+
+    gl.domElement.addEventListener('wheel', handleWheel, { passive: false });
+    return () => gl.domElement.removeEventListener('wheel', handleWheel);
+  }, [camera, gl]);
+
+  return null;
 }
 
 // デフォルトパレット（data-model.mdに基づく）
@@ -264,6 +299,11 @@ function VoxelMesh(props: VoxelMeshProps) {
         .copy(meshRef.current.matrixWorld)
         .invert();
 
+      // カメラタイプを設定
+      materialRef.current.uniforms.uIsOrthographic.value = (camera as any).isOrthographicCamera
+        ? 1.0
+        : 0.0;
+
       // カメラからの距離を計算
       if (camera) {
         const distance = camera.position.distanceTo(meshRef.current.position);
@@ -411,7 +451,7 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
           controlsRef.current.reset();
         }
       }),
-      // usePerspective: { value: true, label: 'Perspective' },
+      usePerspective: { value: true, label: 'Perspective' },
       edgeHighlight: folder(
         {
           enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
@@ -541,8 +581,8 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
     [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]
   );
 
-  const usePerspective = true; // 固定でパース投影を使用
   const {
+    usePerspective,
     fov,
     far,
     alpha,
@@ -609,6 +649,17 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
     const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
     return [dir.x * distance, dir.y * distance, dir.z * distance];
   }, [voxelData.dimensions]);
+
+  // OrthographicCamera用の初期ズーム値を計算
+  const orthoInitialZoomRef = useRef<number>(1);
+  useMemo(() => {
+    const { x, y, z } = voxelData.dimensions;
+    const maxDim = Math.max(x, y, z);
+    // Perspectiveと同等の見え方になるよう調整
+    // ビューポートの半分 / モデルの最大寸法 で適切なズームに
+    const zoom = Math.min(width, height) / (maxDim * 1.4);
+    orthoInitialZoomRef.current = Math.max(0.1, zoom);
+  }, [voxelData.dimensions, width, height]);
 
   // デバッグ: コントロール値確認
   useEffect(() => {
@@ -696,18 +747,20 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
             makeDefault
             position={cameraPosition}
             up={[0, 0, 1]}
-            zoom={2}
+            zoom={orthoInitialZoomRef.current}
             near={0.1}
             far={far}
           />
         )}
+
+        {!usePerspective && <OrthoZoomHandler initialZoomRef={orthoInitialZoomRef} />}
 
         <TrackballControls
           ref={controlsRef}
           rotateSpeed={2.0}
           zoomSpeed={1.2}
           panSpeed={0.8}
-          noZoom={false}
+          noZoom={!usePerspective}
           noPan={false}
           staticMoving={false}
           dynamicDampingFactor={0.2}
