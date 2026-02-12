@@ -74,7 +74,7 @@ interface VoxelRendererProps {
 }
 
 export interface VoxelRendererRef {
-  captureImage: () => Promise<string>;
+  captureImage: (width?: number, height?: number) => Promise<string>;
 }
 
 // OrthographicCamera用のカスタムズームハンドラ
@@ -113,24 +113,105 @@ function OrthoZoomHandler({ initialZoomRef }: { initialZoomRef: React.MutableRef
 
 // 画像キャプチャ用のヘルパーコンポーネント
 // Canvas内部でglにアクセスして画像をキャプチャする
+// サイズ指定時はWebGLRenderTargetでオフスクリーンレンダリングし、
+// メインのカメラ・レンダラーに影響を与えない
 function CaptureHelper({
   captureRef,
 }: {
-  captureRef: React.MutableRefObject<(() => Promise<string>) | null>;
+  captureRef: React.MutableRefObject<((width?: number, height?: number) => Promise<string>) | null>;
 }) {
-  const { gl } = useThree();
+  const { gl, camera, scene } = useThree();
 
   useEffect(() => {
-    captureRef.current = async () => {
-      return new Promise<string>((resolve) => {
-        // 次のフレームのレンダリングが完了するまで待つ
-        requestAnimationFrame(() => {
-          const dataURL = gl.domElement.toDataURL('image/png');
-          resolve(dataURL);
+    captureRef.current = async (width?: number, height?: number) => {
+      if (!width || !height) {
+        // サイズ指定なしの場合は現在のサイズでキャプチャ
+        return new Promise<string>((resolve) => {
+          requestAnimationFrame(() => {
+            resolve(gl.domElement.toDataURL('image/png'));
+          });
         });
+      }
+
+      // オフスクリーンレンダリングで指定サイズのキャプチャを行う
+      const renderTarget = new THREE.WebGLRenderTarget(width, height, {
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
       });
+
+      // カメラのアスペクト比を一時的に変更
+      const aspect = width / height;
+      let originalAspect: number | undefined;
+      let originalLeft: number | undefined;
+      let originalRight: number | undefined;
+      let originalTop: number | undefined;
+      let originalBottom: number | undefined;
+
+      if ((camera as any).isPerspectiveCamera) {
+        const perspCamera = camera as THREE.PerspectiveCamera;
+        originalAspect = perspCamera.aspect;
+        perspCamera.aspect = aspect;
+        perspCamera.updateProjectionMatrix();
+      } else if ((camera as any).isOrthographicCamera) {
+        const orthoCamera = camera as THREE.OrthographicCamera;
+        originalLeft = orthoCamera.left;
+        originalRight = orthoCamera.right;
+        originalTop = orthoCamera.top;
+        originalBottom = orthoCamera.bottom;
+
+        // 現在のFrustumの高さを維持しつつ幅をアスペクト比に合わせる
+        const frustumHeight = orthoCamera.top - orthoCamera.bottom;
+        const frustumWidth = frustumHeight * aspect;
+        orthoCamera.left = -frustumWidth / 2;
+        orthoCamera.right = frustumWidth / 2;
+        orthoCamera.updateProjectionMatrix();
+      }
+
+      // RenderTargetにレンダリング
+      gl.setRenderTarget(renderTarget);
+      gl.clear();
+      gl.render(scene, camera);
+      gl.setRenderTarget(null);
+
+      // カメラを元に戻す
+      if ((camera as any).isPerspectiveCamera && originalAspect !== undefined) {
+        const perspCamera = camera as THREE.PerspectiveCamera;
+        perspCamera.aspect = originalAspect;
+        perspCamera.updateProjectionMatrix();
+      } else if ((camera as any).isOrthographicCamera && originalLeft !== undefined) {
+        const orthoCamera = camera as THREE.OrthographicCamera;
+        orthoCamera.left = originalLeft!;
+        orthoCamera.right = originalRight!;
+        orthoCamera.top = originalTop!;
+        orthoCamera.bottom = originalBottom!;
+        orthoCamera.updateProjectionMatrix();
+      }
+
+      // ピクセルデータを読み取る
+      const pixels = new Uint8Array(width * height * 4);
+      gl.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
+      renderTarget.dispose();
+
+      // Canvas2Dに描画してdataURLを取得（WebGLは左下原点なので上下反転が必要）
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer), width, height);
+      ctx.putImageData(imageData, 0, 0);
+
+      // 上下反転
+      const flipped = document.createElement('canvas');
+      flipped.width = width;
+      flipped.height = height;
+      const fCtx = flipped.getContext('2d')!;
+      fCtx.translate(0, height);
+      fCtx.scale(1, -1);
+      fCtx.drawImage(canvas, 0, 0);
+
+      return flipped.toDataURL('image/png');
     };
-  }, [gl, captureRef]);
+  }, [gl, camera, scene, captureRef]);
 
   return null;
 }
@@ -372,13 +453,13 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const controlsRef = useRef<any>(null);
 
     // 画像キャプチャ用のref
-    const captureRef = useRef<(() => Promise<string>) | null>(null);
+    const captureRef = useRef<((width?: number, height?: number) => Promise<string>) | null>(null);
 
     // 外部から呼び出し可能なメソッドを公開
     useImperativeHandle(ref, () => ({
-      captureImage: async () => {
+      captureImage: async (width?: number, height?: number) => {
         if (captureRef.current) {
-          return await captureRef.current();
+          return await captureRef.current(width, height);
         }
         throw new Error('Capture function not initialized');
       },

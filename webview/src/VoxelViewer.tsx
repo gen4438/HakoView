@@ -3,7 +3,9 @@ import { useExtensionMessage } from './hooks/useExtensionMessage';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { LoadingState } from './components/LoadingState';
 import { HeaderInfo } from './components/HeaderInfo';
+import { SaveImageModal, ImageSize } from './components/SaveImageModal';
 import { VoxelRenderer, VoxelRendererRef } from './VoxelRenderer';
+import { useWindowSize } from 'react-use';
 
 export const VoxelViewer: React.FC = () => {
   const {
@@ -18,34 +20,48 @@ export const VoxelViewer: React.FC = () => {
     saveImage,
   } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const rendererRef = useRef<VoxelRendererRef>(null);
+  const { width: viewWidth, height: viewHeight } = useWindowSize();
 
-  // 画像保存ハンドラ - VSCode APIを使用
-  const handleSaveImage = useCallback(async () => {
-    try {
-      if (!rendererRef.current) {
-        reportError('レンダラーが初期化されていません');
-        return;
+  // 画像保存ハンドラ（サイズ指定付き）- VSCode APIを使用
+  const handleSaveImageWithSize = useCallback(
+    async (size: ImageSize) => {
+      try {
+        if (!rendererRef.current) {
+          reportError('レンダラーが初期化されていません');
+          return;
+        }
+
+        // 画像をキャプチャ（サイズ指定）
+        const dataURL = await rendererRef.current.captureImage(size.width, size.height);
+
+        // デフォルトのファイル名を生成
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const defaultFileName = voxelData?.fileName
+          ? `${voxelData.fileName.replace(/\.les(\.gz)?$/i, '')}_${size.width}x${size.height}_${timestamp}.png`
+          : `voxel_${size.width}x${size.height}_${timestamp}.png`;
+
+        // VSCode拡張機能に保存を依頼（元のファイルパスも送信）
+        saveImage(dataURL, defaultFileName, voxelData?.filePath);
+      } catch (error) {
+        console.error('画像の保存に失敗しました:', error);
+        reportError(
+          `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
+    },
+    [voxelData, reportError, saveImage]
+  );
 
-      // 画像をキャプチャ
-      const dataURL = await rendererRef.current.captureImage();
-
-      // デフォルトのファイル名を生成
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      const defaultFileName = voxelData?.fileName
-        ? `${voxelData.fileName.replace(/\.les(\.gz)?$/i, '')}_${timestamp}.png`
-        : `voxel_${timestamp}.png`;
-
-      // VSCode拡張機能に保存を依頼（元のファイルパスも送信）
-      saveImage(dataURL, defaultFileName, voxelData?.filePath);
-    } catch (error) {
-      console.error('画像の保存に失敗しました:', error);
-      reportError(
-        `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }, [voxelData, reportError, saveImage]);
+  // 直接保存ハンドラ（現在のビューサイズで保存）
+  const handleSaveImage = useCallback(async () => {
+    await handleSaveImageWithSize({
+      width: viewWidth,
+      height: viewHeight,
+      label: '現在のビューサイズ',
+    });
+  }, [viewWidth, viewHeight, handleSaveImageWithSize]);
 
   // Ctrl+Sショートカット
   useEffect(() => {
@@ -224,7 +240,20 @@ export const VoxelViewer: React.FC = () => {
       {dropOverlay}
       {voxelData && <VoxelRenderer ref={rendererRef} voxelData={voxelData} settings={settings} />}
       {voxelData && (
-        <HeaderInfo voxelData={voxelData} onOpenAsText={openAsText} onSaveImage={handleSaveImage} />
+        <>
+          <HeaderInfo
+            voxelData={voxelData}
+            onOpenAsText={openAsText}
+            onSaveImage={handleSaveImage}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+          />
+          <SaveImageModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onSave={handleSaveImageWithSize}
+            currentViewSize={{ width: viewWidth, height: viewHeight }}
+          />
+        </>
       )}
     </div>
   );

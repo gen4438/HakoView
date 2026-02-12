@@ -1,10 +1,13 @@
 import React from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faGear } from '@fortawesome/free-solid-svg-icons';
 import type { VoxelDataMessage } from '../types/voxel';
 
 interface HeaderInfoProps {
   voxelData: VoxelDataMessage;
   onOpenAsText: () => void;
   onSaveImage: () => void;
+  onOpenSettings: () => void;
 }
 
 /**
@@ -24,7 +27,12 @@ function formatLength(meters: number): string {
   }
 }
 
-export const HeaderInfo: React.FC<HeaderInfoProps> = ({ voxelData, onOpenAsText, onSaveImage }) => {
+export const HeaderInfo: React.FC<HeaderInfoProps> = ({
+  voxelData,
+  onOpenAsText,
+  onSaveImage,
+  onOpenSettings,
+}) => {
   const { dimensions, voxelLength, fileName } = voxelData;
 
   return (
@@ -98,34 +106,72 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({ voxelData, onOpenAsText,
         <span>テキストエディタで開く</span>
       </button>
 
-      {/* 画像保存ボタン */}
-      <button
-        onClick={onSaveImage}
+      {/* 画像保存ボタン（2つに分割） */}
+      <div
         style={{
-          background: 'var(--vscode-button-background)',
-          color: 'var(--vscode-button-foreground)',
-          border: 'none',
-          borderRadius: '6px',
-          padding: '8px 16px',
-          fontSize: '13px',
-          fontFamily: 'var(--vscode-font-family)',
-          cursor: 'pointer',
           display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          transition: 'background 0.2s',
+          gap: '4px',
           pointerEvents: 'auto',
         }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--vscode-button-hoverBackground)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'var(--vscode-button-background)';
-        }}
       >
-        <span>💾</span>
-        <span>画像を保存</span>
-      </button>
+        {/* 左：保存ボタン */}
+        <button
+          onClick={onSaveImage}
+          style={{
+            background: 'var(--vscode-button-background)',
+            color: 'var(--vscode-button-foreground)',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontFamily: 'var(--vscode-font-family)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'background 0.2s',
+            flex: 1,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--vscode-button-hoverBackground)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--vscode-button-background)';
+          }}
+        >
+          <span>💾</span>
+          <span>画像を保存</span>
+        </button>
+
+        {/* 右：設定ボタン（歯車アイコン） */}
+        <button
+          onClick={onOpenSettings}
+          style={{
+            background: 'var(--vscode-button-background)',
+            color: 'var(--vscode-button-foreground)',
+            border: 'none',
+            borderRadius: '6px',
+            padding: '8px 12px',
+            fontSize: '13px',
+            fontFamily: 'var(--vscode-font-family)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s',
+            minWidth: '36px',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--vscode-button-hoverBackground)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--vscode-button-background)';
+          }}
+          title="画像サイズ設定"
+        >
+          <FontAwesomeIcon icon={faGear} />
+        </button>
+      </div>
     </div>
   );
 };
