@@ -128,7 +128,7 @@
     "test": "vscode-test",
     "install:webview": "cd webview && pnpm install",
     "prepare": "husky",
-    "vsix": "pnpm run build:prod && vsce package --out dist/hakoview.vsix --allow-missing-repository",
+    "vsix": "pnpm run build:prod && vsce package --out dist/hakoview-v$(node -p \"require('./package.json').version\").vsix --allow-missing-repository",
     "publish:marketplace": "vsce publish --allow-missing-repository",
     "publish:openvsx": "ovsx publish --allow-missing-repository",
     "publish": "pnpm run vsix && pnpm run publish:marketplace && pnpm run publish:openvsx",

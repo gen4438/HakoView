@@ -49,14 +49,18 @@ jobs:
       - name: Build extension
         run: pnpm run build:prod
 
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Package VSIX for ${{ matrix.target }}
-        run: pnpm exec vsce package --target ${{ matrix.target }} --out dist/hakoview-${{ matrix.target }}.vsix --allow-missing-repository
+        run: pnpm exec vsce package --target ${{ matrix.target }} --out dist/hakoview-v${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}.vsix --allow-missing-repository
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
           name: vsix-${{ matrix.target }}
-          path: dist/hakoview-${{ matrix.target }}.vsix
+          path: dist/hakoview-v${{ steps.get_version.outputs.VERSION }}-${{ matrix.target }}.vsix
 
   release:
     needs: build
@@ -89,9 +93,9 @@ jobs:
 
             | ファイル | 対象 |
             |---------|------|
-            | `hakoview-darwin-arm64.vsix` | macOS (Apple Silicon) |
-            | `hakoview-linux-x64.vsix` | Linux (x64) |
-            | `hakoview-win32-x64.vsix` | Windows (x64) |
+            | `hakoview-v${{ steps.tag_version.outputs.VERSION }}-darwin-arm64.vsix` | macOS (Apple Silicon) |
+            | `hakoview-v${{ steps.tag_version.outputs.VERSION }}-linux-x64.vsix` | Linux (x64) |
+            | `hakoview-v${{ steps.tag_version.outputs.VERSION }}-win32-x64.vsix` | Windows (x64) |
 
             ## インストール方法
 
