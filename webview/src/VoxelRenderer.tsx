@@ -122,6 +122,60 @@ function CaptureHelper({
 }) {
   const { gl, camera, scene } = useThree();
 
+  // オフスクリーンキャプチャ用のgizmoシーン（GizmoHelperは別ビューポートで描画されるため再現が必要）
+  const gizmoResources = useMemo(() => {
+    const gScene = new THREE.Scene();
+
+    const axisLength = 1.0;
+    const axisRadius = 0.045;
+    const tipRadius = 0.14;
+
+    const createAxis = (dir: [number, number, number], color: string) => {
+      const mat = new THREE.MeshBasicMaterial({ color });
+      // Shaft
+      const shaftGeo = new THREE.CylinderGeometry(axisRadius, axisRadius, axisLength, 8);
+      if (dir[0] === 1) {
+        shaftGeo.rotateZ(-Math.PI / 2);
+        shaftGeo.translate(axisLength / 2, 0, 0);
+      } else if (dir[1] === 1) {
+        shaftGeo.translate(0, axisLength / 2, 0);
+      } else {
+        shaftGeo.rotateX(Math.PI / 2);
+        shaftGeo.translate(0, 0, axisLength / 2);
+      }
+      gScene.add(new THREE.Mesh(shaftGeo, mat));
+      // Tip
+      const tipGeo = new THREE.SphereGeometry(tipRadius, 12, 12);
+      tipGeo.translate(dir[0] * axisLength, dir[1] * axisLength, dir[2] * axisLength);
+      gScene.add(new THREE.Mesh(tipGeo, mat));
+    };
+
+    createAxis([1, 0, 0], '#ff0000');
+    createAxis([0, 1, 0], '#00ff00');
+    createAxis([0, 0, 1], '#0000ff');
+
+    // Center sphere
+    const centerGeo = new THREE.SphereGeometry(0.08, 12, 12);
+    gScene.add(new THREE.Mesh(centerGeo, new THREE.MeshBasicMaterial({ color: 0x888888 })));
+
+    // 視錐体を軸サイズに合わせて密にし、ビューポート内でのgizmo占有率を上げる
+    const gCamera = new THREE.OrthographicCamera(-1.6, 1.6, 1.6, -1.6, 0.1, 10);
+
+    return { scene: gScene, camera: gCamera };
+  }, []);
+
+  // Cleanup gizmo resources on unmount
+  useEffect(() => {
+    return () => {
+      gizmoResources.scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+      });
+    };
+  }, [gizmoResources]);
+
   useEffect(() => {
     captureRef.current = async (width?: number, height?: number) => {
       if (!width || !height) {
@@ -133,11 +187,19 @@ function CaptureHelper({
         });
       }
 
-      // オフスクリーンレンダリングで指定サイズのキャプチャを行う
-      const renderTarget = new THREE.WebGLRenderTarget(width, height, {
-        format: THREE.RGBAFormat,
-        type: THREE.UnsignedByteType,
+      // オフスクリーン専用のcanvas+レンダラーを作成
+      // dpr=1の独立レンダラーなのでビューポート補正・状態保存復元・Y反転が不要
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = width;
+      offCanvas.height = height;
+      const offRenderer = new THREE.WebGLRenderer({
+        canvas: offCanvas,
+        antialias: false,
+        alpha: true,
+        preserveDrawingBuffer: true,
       });
+      offRenderer.setSize(width, height, false);
+      offRenderer.setPixelRatio(1);
 
       // カメラのアスペクト比を一時的に変更
       const aspect = width / height;
@@ -159,7 +221,6 @@ function CaptureHelper({
         originalTop = orthoCamera.top;
         originalBottom = orthoCamera.bottom;
 
-        // 現在のFrustumの高さを維持しつつ幅をアスペクト比に合わせる
         const frustumHeight = orthoCamera.top - orthoCamera.bottom;
         const frustumWidth = frustumHeight * aspect;
         orthoCamera.left = -frustumWidth / 2;
@@ -167,11 +228,31 @@ function CaptureHelper({
         orthoCamera.updateProjectionMatrix();
       }
 
-      // RenderTargetにレンダリング
-      gl.setRenderTarget(renderTarget);
-      gl.clear();
-      gl.render(scene, camera);
-      gl.setRenderTarget(null);
+      // メインシーンをレンダリング
+      offRenderer.render(scene, camera);
+
+      // Gizmoオーバーレイを右下に描画
+      const { scene: gScene, camera: gCamera } = gizmoResources;
+      gCamera.position.copy(camera.position).normalize().multiplyScalar(4);
+      gCamera.up.copy(camera.up);
+      gCamera.lookAt(0, 0, 0);
+      gCamera.updateProjectionMatrix();
+
+      // GizmoHelper margin={[80,80]} → ビューポートは margin*2=160 CSS px
+      // 保存画像でも同じ画面比率を維持する
+      const canvasMinDim = Math.min(gl.domElement.clientWidth, gl.domElement.clientHeight) || 600;
+      const gizmoScale = Math.min(width, height) / canvasMinDim;
+      const gizmoSize = Math.max(Math.round(160 * gizmoScale), 100);
+      // drei の GizmoHelper はビューポートがコーナーに密着（内部余白でマージンに見える）
+      const gizmoX = width - gizmoSize;
+      const gizmoY = 0;
+
+      offRenderer.autoClear = false;
+      offRenderer.setViewport(gizmoX, gizmoY, gizmoSize, gizmoSize);
+      offRenderer.setScissorTest(true);
+      offRenderer.setScissor(gizmoX, gizmoY, gizmoSize, gizmoSize);
+      offRenderer.clearDepth();
+      offRenderer.render(gScene, gCamera);
 
       // カメラを元に戻す
       if ((camera as any).isPerspectiveCamera && originalAspect !== undefined) {
@@ -187,31 +268,11 @@ function CaptureHelper({
         orthoCamera.updateProjectionMatrix();
       }
 
-      // ピクセルデータを読み取る
-      const pixels = new Uint8Array(width * height * 4);
-      gl.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
-      renderTarget.dispose();
-
-      // Canvas2Dに描画してdataURLを取得（WebGLは左下原点なので上下反転が必要）
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d')!;
-      const imageData = new ImageData(new Uint8ClampedArray(pixels.buffer), width, height);
-      ctx.putImageData(imageData, 0, 0);
-
-      // 上下反転
-      const flipped = document.createElement('canvas');
-      flipped.width = width;
-      flipped.height = height;
-      const fCtx = flipped.getContext('2d')!;
-      fCtx.translate(0, height);
-      fCtx.scale(1, -1);
-      fCtx.drawImage(canvas, 0, 0);
-
-      return flipped.toDataURL('image/png');
+      const dataUrl = offCanvas.toDataURL('image/png');
+      offRenderer.dispose();
+      return dataUrl;
     };
-  }, [gl, camera, scene, captureRef]);
+  }, [gl, camera, scene, captureRef, gizmoResources]);
 
   return null;
 }
