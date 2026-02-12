@@ -238,11 +238,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         // クリッピング面で開始した場合は、クリッピング面の法線を使用
         if (clippedAtEnter && uEnableClipping > 0.5) {
             if (uClippingMode < 1.5 && uClippingMode > 0.5) {
-                // Sliceモード: 軸方向の法線
+                // Sliceモード: 軸方向の法線（カメラ側を向く = レイ方向の逆）
                 n = vec3(0.0);
-                if (int(uSliceAxis) == 0) n.x = sign(direction.x);
-                else if (int(uSliceAxis) == 1) n.y = sign(direction.y);
-                else n.z = sign(direction.z);
+                if (int(uSliceAxis) == 0) n.x = -sign(direction.x);
+                else if (int(uSliceAxis) == 1) n.y = -sign(direction.y);
+                else n.z = -sign(direction.z);
             } else {
                 // Customモード: クリッピング面の法線
                 n = normalize(uClippingPlane.xyz);
