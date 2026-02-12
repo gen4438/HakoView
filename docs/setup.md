@@ -55,8 +55,8 @@ pnpm run publish:openvsx         # OpenVSX Registry
 pnpm run publish                 #両方に公開
 
 # 標準ビルド/テスト
-pnpm run package                 # 本番ビルド
-pnpm run compile                 # 開発ビルド
+pnpm run build:prod              # 本番ビルド
+pnpm run build                   # 開発ビルド
 pnpm run lint                    # コードチェック
 pnpm run test                    # テスト実行
 ```

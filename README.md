@@ -78,7 +78,7 @@ cd webview && pnpm install && cd ..
 pnpm run watch
 
 # 本番ビルド（最適化）
-pnpm run package
+pnpm run build:prod
 
 # 型チェックのみ
 pnpm run check-types
@@ -247,7 +247,7 @@ node esbuild.js
 # 正しい ✅ - 両方とも必須
 pnpm run watch
 # または
-pnpm run package
+pnpm run build:prod
 ```
 
 ## 💡 パフォーマンス目標

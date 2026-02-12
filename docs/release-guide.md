@@ -213,7 +213,7 @@ git tag 0.1.0   # × (v がない)
 
 ```bash
 # ローカルで再現できるか確認
-pnpm run package
+pnpm run build:prod
 
 # webview の依存関係も確認
 cd webview && pnpm install && cd ..

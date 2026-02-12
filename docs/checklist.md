@@ -141,7 +141,7 @@ pnpm run publish:openvsx -- --pat YOUR_TOKEN
 | ローカルで VSIX 作成 | `pnpm run vsix`                              |
 | Marketplace に公開   | `pnpm run publish:marketplace`               |
 | OpenVSX に公開       | `pnpm run publish:openvsx`                   |
-| 完全に再ビルド       | `pnpm run package`                           |
+| 完全に再ビルド       | `pnpm run build:prod`                        |
 | Release を表示       | https://github.com/gen4438/HakoView/releases |
 
 ## リソース

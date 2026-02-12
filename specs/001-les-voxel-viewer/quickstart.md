@@ -520,7 +520,8 @@ main().catch((e) => {
 ```json
 {
   "scripts": {
-    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js && node esbuild.webview.js",
+    "build": "pnpm run check-types && pnpm run lint && node esbuild.js && node esbuild.webview.js",
+    "build:prod": "pnpm run check-types && pnpm run lint && node esbuild.js --production && node esbuild.webview.js --production",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:webview": "node esbuild.webview.js --watch",
@@ -596,7 +597,7 @@ suite('Voxel Editor Integration Test', () => {
 
 ```bash
 # ビルド
-pnpm run compile
+pnpm run build
 
 # VS Codeデバッグ
 # F5キーを押して拡張機能ホストを起動
