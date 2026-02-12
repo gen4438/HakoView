@@ -300,6 +300,46 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
         case 'reportMetrics':
           console.log('Voxel rendering metrics:', message.metrics);
           break;
+
+        case 'saveImage':
+          // 画像保存ダイアログを表示
+          try {
+            // 元のファイルと同じディレクトリをデフォルトにする
+            let defaultUri: vscode.Uri;
+            if (message.originalFilePath) {
+              const originalUri = vscode.Uri.parse(message.originalFilePath);
+              const directory = vscode.Uri.joinPath(originalUri, '..');
+              defaultUri = vscode.Uri.joinPath(directory, message.defaultFileName);
+            } else {
+              // ドキュメントのURIを使用
+              const directory = vscode.Uri.joinPath(document.uri, '..');
+              defaultUri = vscode.Uri.joinPath(directory, message.defaultFileName);
+            }
+
+            const saveUri = await vscode.window.showSaveDialog({
+              defaultUri,
+              filters: {
+                PNG画像: ['png'],
+              },
+              saveLabel: '保存',
+            });
+
+            if (saveUri) {
+              // Base64データからバイナリに変換
+              const base64Data = message.imageData.split(',')[1];
+              const buffer = Buffer.from(base64Data, 'base64');
+
+              // ファイルに書き込み
+              await vscode.workspace.fs.writeFile(saveUri, buffer);
+
+              // 成功メッセージを表示
+              vscode.window.showInformationMessage(`画像を保存しました: ${saveUri.fsPath}`);
+            }
+          } catch (error) {
+            const errorMessage = `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+            vscode.window.showErrorMessage(errorMessage);
+          }
+          break;
       }
     });
   }

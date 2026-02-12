@@ -107,4 +107,5 @@ export type WebviewMessage =
   | { command: 'saveState'; state: ViewerState }
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
-  | { command: 'reportMetrics'; metrics: RenderingMetrics };
+  | { command: 'reportMetrics'; metrics: RenderingMetrics }
+  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string };

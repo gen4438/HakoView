@@ -1,4 +1,12 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import React, {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import {
   TrackballControls,
@@ -65,6 +73,10 @@ interface VoxelRendererProps {
   settings: ViewerSettings | null;
 }
 
+export interface VoxelRendererRef {
+  captureImage: () => Promise<string>;
+}
+
 // OrthographicCamera用のカスタムズームハンドラ
 // TrackballControlsはOrthoCameraのzoomプロパティを正しく制御しないため、
 // wheelイベントで直接camera.zoomを変更する
@@ -95,6 +107,30 @@ function OrthoZoomHandler({ initialZoomRef }: { initialZoomRef: React.MutableRef
     gl.domElement.addEventListener('wheel', handleWheel, { passive: false });
     return () => gl.domElement.removeEventListener('wheel', handleWheel);
   }, [camera, gl]);
+
+  return null;
+}
+
+// 画像キャプチャ用のヘルパーコンポーネント
+// Canvas内部でglにアクセスして画像をキャプチャする
+function CaptureHelper({
+  captureRef,
+}: {
+  captureRef: React.MutableRefObject<(() => Promise<string>) | null>;
+}) {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    captureRef.current = async () => {
+      return new Promise<string>((resolve) => {
+        // 次のフレームのレンダリングが完了するまで待つ
+        requestAnimationFrame(() => {
+          const dataURL = gl.domElement.toDataURL('image/png');
+          resolve(dataURL);
+        });
+      });
+    };
+  }, [gl, captureRef]);
 
   return null;
 }
@@ -330,401 +366,308 @@ function VoxelMesh(props: VoxelMeshProps) {
   );
 }
 
-export function VoxelRenderer({ voxelData, settings }: VoxelRendererProps) {
-  // TrackballControlsのrefを作成
-  const controlsRef = useRef<any>(null);
+export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
+  ({ voxelData, settings }, ref) => {
+    // TrackballControlsのrefを作成
+    const controlsRef = useRef<any>(null);
 
-  // デバッグログ
-  useEffect(() => {
-    console.log('VoxelRenderer received data:', {
-      dimensions: voxelData.dimensions,
-      voxelLength: voxelData.voxelLength,
-      valuesLength: voxelData.values.length,
-      settings,
-    });
-  }, [voxelData, settings]);
+    // 画像キャプチャ用のref
+    const captureRef = useRef<(() => Promise<string>) | null>(null);
 
-  // ボクセル値表示制御の状態（0は初期値非表示）
-  const [valueVisibility, setValueVisibility] = useState<boolean[]>(
-    Array(16)
-      .fill(0)
-      .map((_, i) => i !== 0)
-  );
-  const [customColors, setCustomColors] = useState<string[]>(
-    Array(16)
-      .fill('')
-      .map((_, i) => defaultPalette[i] || '#000000')
-  );
-
-  // デフォルト値を保存
-  const defaultValues = useRef({
-    fov: 50,
-    far: 1000,
-    alpha: 1.0,
-    lightIntensity: 0.8,
-    ambientIntensity: 0.4,
-    enableEdgeHighlight: false,
-    edgeThickness: 0.05,
-    edgeColor: '#ffffff',
-    edgeIntensity: 0.8,
-    edgeMaxDistance: 200,
-    clippingMode: 'Off',
-    sliceAxis: 'Z',
-    slicePosition: 0,
-    sliceReverse: false,
-    customNormalX: 0,
-    customNormalY: 0,
-    customNormalZ: 1,
-    customDistance: 0,
-    usePerspective: true,
-  });
-
-  // Levaから独立した状態更新関数
-  const updateValueVisibility = useCallback((index: number, value: boolean) => {
-    setValueVisibility((prev) => {
-      const newVisibility = [...prev];
-      newVisibility[index] = value;
-      return newVisibility;
-    });
-  }, []);
-
-  const updateCustomColor = useCallback((index: number, value: string) => {
-    console.log(`Color updated: index=${index}, value=${value}`);
-    setCustomColors((prev) => {
-      const newColors = [...prev];
-      newColors[index] = value;
-      return newColors;
-    });
-  }, []);
-
-  // DPR管理
-  const { width, height } = useWindowSize();
-  const [currentDevicePixelRatio, setCurrentDevicePixelRatio] = useState(window.devicePixelRatio);
-  const maxDpr = Math.min(currentDevicePixelRatio, 3.0);
-
-  // Levaコントロール
-  const [controls, set] = useControls(
-    () => ({
-      Reset: button(() => {
-        // ボクセル値表示とカスタム色のリセット用オブジェクト
-        const voxelResetValues: Record<string, any> = {};
-        for (let i = 0; i < 16; i++) {
-          voxelResetValues[`visible${i}`] = i !== 0; // 0は非表示、1-15は表示
-          voxelResetValues[`color${i}`] = defaultPalette[i] || '#000000';
+    // 外部から呼び出し可能なメソッドを公開
+    useImperativeHandle(ref, () => ({
+      captureImage: async () => {
+        if (captureRef.current) {
+          return await captureRef.current();
         }
+        throw new Error('Capture function not initialized');
+      },
+    }));
 
-        // すべての設定をデフォルト値に戻す
-        set({
-          alpha: defaultValues.current.alpha,
-          dpr: maxDpr,
-          fov: defaultValues.current.fov,
-          far: defaultValues.current.far,
-          lightIntensity: defaultValues.current.lightIntensity,
-          ambientIntensity: defaultValues.current.ambientIntensity,
-          enableEdgeHighlight: defaultValues.current.enableEdgeHighlight,
-          edgeThickness: defaultValues.current.edgeThickness,
-          edgeColor: defaultValues.current.edgeColor,
-          edgeIntensity: defaultValues.current.edgeIntensity,
-          edgeMaxDistance: defaultValues.current.edgeMaxDistance,
-          clippingMode: defaultValues.current.clippingMode,
-          sliceAxis: defaultValues.current.sliceAxis,
-          slicePosition: defaultValues.current.slicePosition,
-          sliceReverse: defaultValues.current.sliceReverse,
-          customNormalX: defaultValues.current.customNormalX,
-          customNormalY: defaultValues.current.customNormalY,
-          customNormalZ: defaultValues.current.customNormalZ,
-          customDistance: defaultValues.current.customDistance,
-          ...voxelResetValues,
-        });
+    // デバッグログ
+    useEffect(() => {
+      console.log('VoxelRenderer received data:', {
+        dimensions: voxelData.dimensions,
+        voxelLength: voxelData.voxelLength,
+        valuesLength: voxelData.values.length,
+        settings,
+      });
+    }, [voxelData, settings]);
 
-        // React状態もリセット（onChangeが呼ばれない場合のため）
-        setValueVisibility(
-          Array(16)
-            .fill(0)
-            .map((_, i) => i !== 0)
-        );
-        setCustomColors(
-          Array(16)
-            .fill('')
-            .map((_, i) => defaultPalette[i] || '#000000')
-        );
+    // ボクセル値表示制御の状態（0は初期値非表示）
+    const [valueVisibility, setValueVisibility] = useState<boolean[]>(
+      Array(16)
+        .fill(0)
+        .map((_, i) => i !== 0)
+    );
+    const [customColors, setCustomColors] = useState<string[]>(
+      Array(16)
+        .fill('')
+        .map((_, i) => defaultPalette[i] || '#000000')
+    );
 
-        // カメラ位置もリセット
-        if (controlsRef.current) {
-          controlsRef.current.reset();
-        }
-      }),
-      usePerspective: { value: true, label: 'Perspective' },
-      edgeHighlight: folder(
-        {
-          enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
-          edgeThickness: {
-            value: defaultValues.current.edgeThickness,
-            min: 0.02,
-            max: 0.15,
-            step: 0.01,
-          },
-          edgeColor: { value: defaultValues.current.edgeColor },
-          edgeIntensity: {
-            value: defaultValues.current.edgeIntensity,
-            min: 0.0,
-            max: 1.0,
-            step: 0.01,
-          },
-          edgeMaxDistance: {
-            value: defaultValues.current.edgeMaxDistance,
-            min: 50,
-            max: 1000,
-            step: 10,
-          },
-        },
-        { collapsed: true }
-      ),
-      voxelColors: folder(
-        {
-          // 0-15値制御を動的生成
-          ...Array.from({ length: 16 }, (_, i) => i).reduce(
-            (acc, i) => ({
-              ...acc,
-              [`visible${i}`]: {
-                value: i !== 0, // 初期値
-                onChange: (value: boolean) => {
-                  // 状態を更新
-                  updateValueVisibility(i, value);
-                },
-              },
-              [`color${i}`]: {
-                value: defaultPalette[i] || '#000000', // 初期値
-                onChange: (value: string) => {
-                  // 状態を更新
-                  updateCustomColor(i, value);
-                },
-              },
-            }),
-            {}
-          ),
-        },
-        { collapsed: true }
-      ),
-      clipping: folder(
-        {
-          clippingMode: {
-            value: defaultValues.current.clippingMode,
-            options: ['Off', 'Slice', 'Custom'],
-          },
-          sliceAxis: {
-            value: defaultValues.current.sliceAxis,
-            options: ['X', 'Y', 'Z'],
-            render: (get: any) => get('clipping.clippingMode') === 'Slice',
-          },
-          slicePosition: {
-            value: defaultValues.current.slicePosition,
-            min: -150,
-            max: 150,
-            step: 1,
-            render: (get: any) => get('clipping.clippingMode') === 'Slice',
-          },
-          sliceReverse: {
-            value: defaultValues.current.sliceReverse,
-            label: 'Reverse Direction',
-            render: (get: any) => get('clipping.clippingMode') === 'Slice',
-          },
-          customNormalX: {
-            value: defaultValues.current.customNormalX,
-            min: -1,
-            max: 1,
-            step: 0.01,
-            render: (get: any) => get('clipping.clippingMode') === 'Custom',
-          },
-          customNormalY: {
-            value: defaultValues.current.customNormalY,
-            min: -1,
-            max: 1,
-            step: 0.01,
-            render: (get: any) => get('clipping.clippingMode') === 'Custom',
-          },
-          customNormalZ: {
-            value: defaultValues.current.customNormalZ,
-            min: -1,
-            max: 1,
-            step: 0.01,
-            render: (get: any) => get('clipping.clippingMode') === 'Custom',
-          },
-          customDistance: {
-            value: defaultValues.current.customDistance,
-            min: -300,
-            max: 300,
-            step: 1,
-            render: (get: any) => get('clipping.clippingMode') === 'Custom',
-          },
-        },
-        { collapsed: true }
-      ),
-      dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
-      alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
-      camera: folder(
-        {
-          fov: { value: defaultValues.current.fov, min: 0, max: 180, step: 5 },
-          far: { value: defaultValues.current.far, min: 500, max: 3000, step: 100 },
-        },
-        { collapsed: true }
-      ),
-      lighting: folder(
-        {
-          lightIntensity: {
-            value: defaultValues.current.lightIntensity,
-            min: 0.0,
-            max: 2.0,
-            step: 0.01,
-          },
-          ambientIntensity: {
-            value: defaultValues.current.ambientIntensity,
-            min: 0.0,
-            max: 1.0,
-            step: 0.01,
-          },
-        },
-        { collapsed: true }
-      ),
-    }),
-    [maxDpr, updateValueVisibility, updateCustomColor]
-  );
+    // デフォルト値を保存
+    const defaultValues = useRef({
+      fov: 50,
+      far: 1000,
+      alpha: 1.0,
+      lightIntensity: 0.8,
+      ambientIntensity: 0.4,
+      enableEdgeHighlight: false,
+      edgeThickness: 0.05,
+      edgeColor: '#ffffff',
+      edgeIntensity: 0.8,
+      edgeMaxDistance: 200,
+      clippingMode: 'Off',
+      sliceAxis: 'Z',
+      slicePosition: 0,
+      sliceReverse: false,
+      customNormalX: 0,
+      customNormalY: 0,
+      customNormalZ: 1,
+      customDistance: 0,
+      usePerspective: true,
+    });
 
-  // 設定が変更されたらカスタム色を更新
-  useEffect(() => {
-    if (settings?.colormap) {
+    // Levaから独立した状態更新関数
+    const updateValueVisibility = useCallback((index: number, value: boolean) => {
+      setValueVisibility((prev) => {
+        const newVisibility = [...prev];
+        newVisibility[index] = value;
+        return newVisibility;
+      });
+    }, []);
+
+    const updateCustomColor = useCallback((index: number, value: string) => {
+      console.log(`Color updated: index=${index}, value=${value}`);
       setCustomColors((prev) => {
         const newColors = [...prev];
-        // 設定オブジェクトから色を適用 (0-15)
+        newColors[index] = value;
+        return newColors;
+      });
+    }, []);
+
+    // DPR管理
+    const { width, height } = useWindowSize();
+    const [currentDevicePixelRatio, setCurrentDevicePixelRatio] = useState(window.devicePixelRatio);
+    const maxDpr = Math.min(currentDevicePixelRatio, 3.0);
+
+    // Levaコントロール
+    const [controls, set] = useControls(
+      () => ({
+        Reset: button(() => {
+          // ボクセル値表示とカスタム色のリセット用オブジェクト
+          const voxelResetValues: Record<string, any> = {};
+          for (let i = 0; i < 16; i++) {
+            voxelResetValues[`visible${i}`] = i !== 0; // 0は非表示、1-15は表示
+            voxelResetValues[`color${i}`] = defaultPalette[i] || '#000000';
+          }
+
+          // すべての設定をデフォルト値に戻す
+          set({
+            alpha: defaultValues.current.alpha,
+            dpr: maxDpr,
+            fov: defaultValues.current.fov,
+            far: defaultValues.current.far,
+            lightIntensity: defaultValues.current.lightIntensity,
+            ambientIntensity: defaultValues.current.ambientIntensity,
+            enableEdgeHighlight: defaultValues.current.enableEdgeHighlight,
+            edgeThickness: defaultValues.current.edgeThickness,
+            edgeColor: defaultValues.current.edgeColor,
+            edgeIntensity: defaultValues.current.edgeIntensity,
+            edgeMaxDistance: defaultValues.current.edgeMaxDistance,
+            clippingMode: defaultValues.current.clippingMode,
+            sliceAxis: defaultValues.current.sliceAxis,
+            slicePosition: defaultValues.current.slicePosition,
+            sliceReverse: defaultValues.current.sliceReverse,
+            customNormalX: defaultValues.current.customNormalX,
+            customNormalY: defaultValues.current.customNormalY,
+            customNormalZ: defaultValues.current.customNormalZ,
+            customDistance: defaultValues.current.customDistance,
+            ...voxelResetValues,
+          });
+
+          // React状態もリセット（onChangeが呼ばれない場合のため）
+          setValueVisibility(
+            Array(16)
+              .fill(0)
+              .map((_, i) => i !== 0)
+          );
+          setCustomColors(
+            Array(16)
+              .fill('')
+              .map((_, i) => defaultPalette[i] || '#000000')
+          );
+
+          // カメラ位置もリセット
+          if (controlsRef.current) {
+            controlsRef.current.reset();
+          }
+        }),
+        usePerspective: { value: true, label: 'Perspective' },
+        edgeHighlight: folder(
+          {
+            enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
+            edgeThickness: {
+              value: defaultValues.current.edgeThickness,
+              min: 0.02,
+              max: 0.15,
+              step: 0.01,
+            },
+            edgeColor: { value: defaultValues.current.edgeColor },
+            edgeIntensity: {
+              value: defaultValues.current.edgeIntensity,
+              min: 0.0,
+              max: 1.0,
+              step: 0.01,
+            },
+            edgeMaxDistance: {
+              value: defaultValues.current.edgeMaxDistance,
+              min: 50,
+              max: 1000,
+              step: 10,
+            },
+          },
+          { collapsed: true }
+        ),
+        voxelColors: folder(
+          {
+            // 0-15値制御を動的生成
+            ...Array.from({ length: 16 }, (_, i) => i).reduce(
+              (acc, i) => ({
+                ...acc,
+                [`visible${i}`]: {
+                  value: i !== 0, // 初期値
+                  onChange: (value: boolean) => {
+                    // 状態を更新
+                    updateValueVisibility(i, value);
+                  },
+                },
+                [`color${i}`]: {
+                  value: defaultPalette[i] || '#000000', // 初期値
+                  onChange: (value: string) => {
+                    // 状態を更新
+                    updateCustomColor(i, value);
+                  },
+                },
+              }),
+              {}
+            ),
+          },
+          { collapsed: true }
+        ),
+        clipping: folder(
+          {
+            clippingMode: {
+              value: defaultValues.current.clippingMode,
+              options: ['Off', 'Slice', 'Custom'],
+            },
+            sliceAxis: {
+              value: defaultValues.current.sliceAxis,
+              options: ['X', 'Y', 'Z'],
+              render: (get: any) => get('clipping.clippingMode') === 'Slice',
+            },
+            slicePosition: {
+              value: defaultValues.current.slicePosition,
+              min: -150,
+              max: 150,
+              step: 1,
+              render: (get: any) => get('clipping.clippingMode') === 'Slice',
+            },
+            sliceReverse: {
+              value: defaultValues.current.sliceReverse,
+              label: 'Reverse Direction',
+              render: (get: any) => get('clipping.clippingMode') === 'Slice',
+            },
+            customNormalX: {
+              value: defaultValues.current.customNormalX,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clipping.clippingMode') === 'Custom',
+            },
+            customNormalY: {
+              value: defaultValues.current.customNormalY,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clipping.clippingMode') === 'Custom',
+            },
+            customNormalZ: {
+              value: defaultValues.current.customNormalZ,
+              min: -1,
+              max: 1,
+              step: 0.01,
+              render: (get: any) => get('clipping.clippingMode') === 'Custom',
+            },
+            customDistance: {
+              value: defaultValues.current.customDistance,
+              min: -300,
+              max: 300,
+              step: 1,
+              render: (get: any) => get('clipping.clippingMode') === 'Custom',
+            },
+          },
+          { collapsed: true }
+        ),
+        dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
+        alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
+        camera: folder(
+          {
+            fov: { value: defaultValues.current.fov, min: 0, max: 180, step: 5 },
+            far: { value: defaultValues.current.far, min: 500, max: 3000, step: 100 },
+          },
+          { collapsed: true }
+        ),
+        lighting: folder(
+          {
+            lightIntensity: {
+              value: defaultValues.current.lightIntensity,
+              min: 0.0,
+              max: 2.0,
+              step: 0.01,
+            },
+            ambientIntensity: {
+              value: defaultValues.current.ambientIntensity,
+              min: 0.0,
+              max: 1.0,
+              step: 0.01,
+            },
+          },
+          { collapsed: true }
+        ),
+      }),
+      [maxDpr, updateValueVisibility, updateCustomColor]
+    );
+
+    // 設定が変更されたらカスタム色を更新
+    useEffect(() => {
+      if (settings?.colormap) {
+        setCustomColors((prev) => {
+          const newColors = [...prev];
+          // 設定オブジェクトから色を適用 (0-15)
+          Object.entries(settings.colormap || {}).forEach(([key, color]) => {
+            const index = parseInt(key, 10);
+            if (!isNaN(index) && index >= 0 && index < 16) {
+              newColors[index] = color;
+            }
+          });
+          return newColors;
+        });
+
+        const voxelResetValues: Record<string, any> = {};
         Object.entries(settings.colormap || {}).forEach(([key, color]) => {
           const index = parseInt(key, 10);
           if (!isNaN(index) && index >= 0 && index < 16) {
-            newColors[index] = color;
+            voxelResetValues[`color${index}`] = color;
           }
         });
-        return newColors;
-      });
-
-      const voxelResetValues: Record<string, any> = {};
-      Object.entries(settings.colormap || {}).forEach(([key, color]) => {
-        const index = parseInt(key, 10);
-        if (!isNaN(index) && index >= 0 && index < 16) {
-          voxelResetValues[`color${index}`] = color;
-        }
-      });
-      set(voxelResetValues);
-    }
-  }, [settings, set]);
-
-  const {
-    usePerspective,
-    fov,
-    far,
-    alpha,
-    dpr,
-    lightIntensity,
-    ambientIntensity,
-    enableEdgeHighlight,
-    edgeThickness,
-    edgeColor,
-    edgeIntensity,
-    edgeMaxDistance,
-    clippingMode,
-    sliceAxis,
-    slicePosition,
-    sliceReverse,
-    customNormalX,
-    customNormalY,
-    customNormalZ,
-    customDistance,
-  } = controls;
-
-  // キーボードショートカット
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
-
-      switch (event.key.toLowerCase()) {
-        case 'p':
-          set({ usePerspective: true });
-          break;
-        case 'o':
-          set({ usePerspective: false });
-          break;
-        case 'e':
-          set({ enableEdgeHighlight: !enableEdgeHighlight });
-          break;
-        case 'c':
-          set({ clippingMode: clippingMode === 'Off' ? 'Slice' : 'Off' });
-          break;
+        set(voxelResetValues);
       }
-    };
+    }, [settings, set]);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enableEdgeHighlight, clippingMode, set]);
-
-  // クリッピングプレーン計算
-  const calculateClippingPlane = () => {
-    if (clippingMode === 'Off') {
-      return { normal: new THREE.Vector3(0, 0, 1), distance: 0, enabled: false };
-    }
-
-    if (clippingMode === 'Slice') {
-      const normal = new THREE.Vector3(0, 0, 0);
-      let distance = slicePosition;
-
-      switch (sliceAxis) {
-        case 'X':
-          normal.x = sliceReverse ? -1 : 1;
-          break;
-        case 'Y':
-          normal.y = sliceReverse ? -1 : 1;
-          break;
-        case 'Z':
-          normal.z = sliceReverse ? -1 : 1;
-          break;
-      }
-
-      if (sliceReverse) distance = -distance;
-      return { normal, distance, enabled: true };
-    }
-
-    const normal = new THREE.Vector3(customNormalX, customNormalY, customNormalZ).normalize();
-    return { normal, distance: customDistance, enabled: true };
-  };
-
-  const clippingPlane = calculateClippingPlane();
-  const effectiveDpr = Math.min(Math.max(dpr, 0.5), maxDpr);
-
-  // モデル全体が画面に収まるカメラ初期位置を計算
-  const [cameraPosition] = useState((): [number, number, number] => {
-    const { x, y, z } = voxelData.dimensions;
-    // バウンディングスフィアの半径
-    const radius = Math.sqrt(x * x + y * y + z * z) / 2;
-    // デフォルトFOVでちょうど収まる距離（少し余白を追加）
-    const defaultFovRad = (defaultValues.current.fov * Math.PI) / 180;
-    const distance = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
-    // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
-    const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
-    return [dir.x * distance, dir.y * distance, dir.z * distance];
-  });
-
-  // OrthographicCamera用の初期ズーム値を計算
-  const orthoInitialZoomRef = useRef<number>(0);
-  useMemo(() => {
-    if (orthoInitialZoomRef.current !== 0) return;
-    const { x, y, z } = voxelData.dimensions;
-    const maxDim = Math.max(x, y, z);
-    // Perspectiveと同等の見え方になるよう調整
-    // ビューポートの半分 / モデルの最大寸法 で適切なズームに
-    const zoom = Math.min(width, height) / (maxDim * 1.4);
-    orthoInitialZoomRef.current = Math.max(0.1, zoom);
-  }, [voxelData.dimensions, width, height]);
-
-  // デバッグ: コントロール値確認
-  useEffect(() => {
-    console.log('Controls:', {
+    const {
+      usePerspective,
       fov,
       far,
       alpha,
@@ -732,136 +675,248 @@ export function VoxelRenderer({ voxelData, settings }: VoxelRendererProps) {
       lightIntensity,
       ambientIntensity,
       enableEdgeHighlight,
-      clippingEnabled: clippingPlane.enabled,
-    });
-  }, [
-    fov,
-    far,
-    alpha,
-    dpr,
-    lightIntensity,
-    ambientIntensity,
-    enableEdgeHighlight,
-    clippingPlane.enabled,
-  ]);
+      edgeThickness,
+      edgeColor,
+      edgeIntensity,
+      edgeMaxDistance,
+      clippingMode,
+      sliceAxis,
+      slicePosition,
+      sliceReverse,
+      customNormalX,
+      customNormalY,
+      customNormalZ,
+      customDistance,
+    } = controls;
 
-  // DPR変化の監視
-  useEffect(() => {
-    const handlePixelRatioChange = () => {
-      setCurrentDevicePixelRatio(window.devicePixelRatio);
-    };
+    // キーボードショートカット
+    useEffect(() => {
+      const handleKeyDown = (event: KeyboardEvent) => {
+        // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
 
-    const mediaQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-    mediaQuery.addEventListener('change', handlePixelRatioChange);
-
-    return () => {
-      mediaQuery.removeEventListener('change', handlePixelRatioChange);
-    };
-  }, []);
-
-  // rキーでカメラリセット
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'r' || event.key === 'R') {
-        if (controlsRef.current) {
-          controlsRef.current.reset();
+        switch (event.key.toLowerCase()) {
+          case 'p':
+            set({ usePerspective: true });
+            break;
+          case 'o':
+            set({ usePerspective: false });
+            break;
+          case 'e':
+            set({ enableEdgeHighlight: !enableEdgeHighlight });
+            break;
+          case 'c':
+            set({ clippingMode: clippingMode === 'Off' ? 'Slice' : 'Off' });
+            break;
         }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [enableEdgeHighlight, clippingMode, set]);
+
+    // クリッピングプレーン計算
+    const calculateClippingPlane = () => {
+      if (clippingMode === 'Off') {
+        return { normal: new THREE.Vector3(0, 0, 1), distance: 0, enabled: false };
       }
+
+      if (clippingMode === 'Slice') {
+        const normal = new THREE.Vector3(0, 0, 0);
+        let distance = slicePosition;
+
+        switch (sliceAxis) {
+          case 'X':
+            normal.x = sliceReverse ? -1 : 1;
+            break;
+          case 'Y':
+            normal.y = sliceReverse ? -1 : 1;
+            break;
+          case 'Z':
+            normal.z = sliceReverse ? -1 : 1;
+            break;
+        }
+
+        if (sliceReverse) distance = -distance;
+        return { normal, distance, enabled: true };
+      }
+
+      const normal = new THREE.Vector3(customNormalX, customNormalY, customNormalZ).normalize();
+      return { normal, distance: customDistance, enabled: true };
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    const clippingPlane = calculateClippingPlane();
+    const effectiveDpr = Math.min(Math.max(dpr, 0.5), maxDpr);
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+    // モデル全体が画面に収まるカメラ初期位置を計算
+    const [cameraPosition] = useState((): [number, number, number] => {
+      const { x, y, z } = voxelData.dimensions;
+      // バウンディングスフィアの半径
+      const radius = Math.sqrt(x * x + y * y + z * z) / 2;
+      // デフォルトFOVでちょうど収まる距離（少し余白を追加）
+      const defaultFovRad = (defaultValues.current.fov * Math.PI) / 180;
+      const distance = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
+      // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
+      const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
+      return [dir.x * distance, dir.y * distance, dir.z * distance];
+    });
 
-  return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <Leva
-        collapsed={true}
-        theme={{
-          sizes: {
-            rootWidth: '320px',
-            controlWidth: '160px',
-          },
-        }}
-        oneLineLabels
-        hideCopyButton
-      />
+    // OrthographicCamera用の初期ズーム値を計算
+    const orthoInitialZoomRef = useRef<number>(0);
+    useMemo(() => {
+      if (orthoInitialZoomRef.current !== 0) return;
+      const { x, y, z } = voxelData.dimensions;
+      const maxDim = Math.max(x, y, z);
+      // Perspectiveと同等の見え方になるよう調整
+      // ビューポートの半分 / モデルの最大寸法 で適切なズームに
+      const zoom = Math.min(width, height) / (maxDim * 1.4);
+      orthoInitialZoomRef.current = Math.max(0.1, zoom);
+    }, [voxelData.dimensions, width, height]);
 
-      <Canvas
-        gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
-        dpr={effectiveDpr}
-        style={{ width: '100%', height: '100%', background: 'transparent' }}
-      >
-        {usePerspective ? (
-          <PerspectiveCamera
-            makeDefault
-            position={cameraPosition}
-            up={[0, 0, 1]}
-            fov={fov}
-            far={far}
-          />
-        ) : (
-          <OrthographicCamera
-            makeDefault
-            position={cameraPosition}
-            up={[0, 0, 1]}
-            zoom={orthoInitialZoomRef.current}
-            near={0.1}
-            far={far}
-          />
-        )}
+    // デバッグ: コントロール値確認
+    useEffect(() => {
+      console.log('Controls:', {
+        fov,
+        far,
+        alpha,
+        dpr,
+        lightIntensity,
+        ambientIntensity,
+        enableEdgeHighlight,
+        clippingEnabled: clippingPlane.enabled,
+      });
+    }, [
+      fov,
+      far,
+      alpha,
+      dpr,
+      lightIntensity,
+      ambientIntensity,
+      enableEdgeHighlight,
+      clippingPlane.enabled,
+    ]);
 
-        {!usePerspective && <OrthoZoomHandler initialZoomRef={orthoInitialZoomRef} />}
+    // DPR変化の監視
+    useEffect(() => {
+      const handlePixelRatioChange = () => {
+        setCurrentDevicePixelRatio(window.devicePixelRatio);
+      };
 
-        <TrackballControls
-          ref={controlsRef}
-          rotateSpeed={2.0}
-          zoomSpeed={1.2}
-          panSpeed={0.8}
-          noZoom={!usePerspective}
-          noPan={false}
-          staticMoving={false}
-          dynamicDampingFactor={0.2}
-        />
+      const mediaQuery = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      mediaQuery.addEventListener('change', handlePixelRatioChange);
 
-        <ambientLight intensity={ambientIntensity} />
-        <directionalLight position={[10, 5, 10]} intensity={lightIntensity} />
+      return () => {
+        mediaQuery.removeEventListener('change', handlePixelRatioChange);
+      };
+    }, []);
 
-        <VoxelMesh
-          voxelData={voxelData}
-          alpha={alpha}
-          wireframe={false}
-          lightIntensity={lightIntensity}
-          ambientIntensity={ambientIntensity}
-          clippingPlane={{
-            normal: clippingPlane.normal,
-            distance: clippingPlane.distance,
+    // rキーでカメラリセット
+    useEffect(() => {
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'r' || event.key === 'R') {
+          if (controlsRef.current) {
+            controlsRef.current.reset();
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }, []);
+
+    return (
+      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        <Leva
+          collapsed={true}
+          theme={{
+            sizes: {
+              rootWidth: '320px',
+              controlWidth: '160px',
+            },
           }}
-          enableClipping={clippingPlane.enabled}
-          enableEdgeHighlight={enableEdgeHighlight}
-          edgeThickness={edgeThickness}
-          edgeColor={edgeColor}
-          edgeIntensity={edgeIntensity}
-          edgeFadeStart={0}
-          edgeFadeEnd={edgeMaxDistance}
-          valueVisibility={valueVisibility}
-          customColors={customColors}
+          oneLineLabels
+          hideCopyButton
         />
 
-        <gridHelper
-          args={[100, 10]}
-          position={[0, 0, -voxelData.dimensions.z / 2 - 5]}
-          rotation={[Math.PI / 2, 0, 0]}
-        />
+        <Canvas
+          gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
+          dpr={effectiveDpr}
+          style={{ width: '100%', height: '100%', background: 'transparent' }}
+        >
+          {usePerspective ? (
+            <PerspectiveCamera
+              makeDefault
+              position={cameraPosition}
+              up={[0, 0, 1]}
+              fov={fov}
+              far={far}
+            />
+          ) : (
+            <OrthographicCamera
+              makeDefault
+              position={cameraPosition}
+              up={[0, 0, 1]}
+              zoom={orthoInitialZoomRef.current}
+              near={0.1}
+              far={far}
+            />
+          )}
 
-        <Stats />
-        <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
-          <GizmoViewport axisColors={['#ff0000', '#00ff00', '#0000ff']} labelColor="white" />
-        </GizmoHelper>
-      </Canvas>
-    </div>
-  );
-}
+          {!usePerspective && <OrthoZoomHandler initialZoomRef={orthoInitialZoomRef} />}
+
+          <CaptureHelper captureRef={captureRef} />
+
+          <TrackballControls
+            ref={controlsRef}
+            rotateSpeed={2.0}
+            zoomSpeed={1.2}
+            panSpeed={0.8}
+            noZoom={!usePerspective}
+            noPan={false}
+            staticMoving={false}
+            dynamicDampingFactor={0.2}
+          />
+
+          <ambientLight intensity={ambientIntensity} />
+          <directionalLight position={[10, 5, 10]} intensity={lightIntensity} />
+
+          <VoxelMesh
+            voxelData={voxelData}
+            alpha={alpha}
+            wireframe={false}
+            lightIntensity={lightIntensity}
+            ambientIntensity={ambientIntensity}
+            clippingPlane={{
+              normal: clippingPlane.normal,
+              distance: clippingPlane.distance,
+            }}
+            enableClipping={clippingPlane.enabled}
+            enableEdgeHighlight={enableEdgeHighlight}
+            edgeThickness={edgeThickness}
+            edgeColor={edgeColor}
+            edgeIntensity={edgeIntensity}
+            edgeFadeStart={0}
+            edgeFadeEnd={edgeMaxDistance}
+            valueVisibility={valueVisibility}
+            customColors={customColors}
+          />
+
+          <gridHelper
+            args={[100, 10]}
+            position={[0, 0, -voxelData.dimensions.z / 2 - 5]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+
+          <Stats />
+          <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
+            <GizmoViewport axisColors={['#ff0000', '#00ff00', '#0000ff']} labelColor="white" />
+          </GizmoHelper>
+        </Canvas>
+      </div>
+    );
+  }
+);
+
+VoxelRenderer.displayName = 'VoxelRenderer';

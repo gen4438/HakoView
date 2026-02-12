@@ -4,6 +4,7 @@ import type { VoxelDataMessage } from '../types/voxel';
 interface HeaderInfoProps {
   voxelData: VoxelDataMessage;
   onOpenAsText: () => void;
+  onSaveImage: () => void;
 }
 
 /**
@@ -23,7 +24,7 @@ function formatLength(meters: number): string {
   }
 }
 
-export const HeaderInfo: React.FC<HeaderInfoProps> = ({ voxelData, onOpenAsText }) => {
+export const HeaderInfo: React.FC<HeaderInfoProps> = ({ voxelData, onOpenAsText, onSaveImage }) => {
   const { dimensions, voxelLength, fileName } = voxelData;
 
   return (
@@ -95,6 +96,35 @@ export const HeaderInfo: React.FC<HeaderInfoProps> = ({ voxelData, onOpenAsText 
       >
         <span>📝</span>
         <span>テキストエディタで開く</span>
+      </button>
+
+      {/* 画像保存ボタン */}
+      <button
+        onClick={onSaveImage}
+        style={{
+          background: 'var(--vscode-button-background)',
+          color: 'var(--vscode-button-foreground)',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '8px 16px',
+          fontSize: '13px',
+          fontFamily: 'var(--vscode-font-family)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          transition: 'background 0.2s',
+          pointerEvents: 'auto',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--vscode-button-hoverBackground)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--vscode-button-background)';
+        }}
+      >
+        <span>💾</span>
+        <span>画像を保存</span>
       </button>
     </div>
   );

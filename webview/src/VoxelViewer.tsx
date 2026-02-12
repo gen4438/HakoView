@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { useExtensionMessage } from './hooks/useExtensionMessage';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { LoadingState } from './components/LoadingState';
 import { HeaderInfo } from './components/HeaderInfo';
-import { VoxelRenderer } from './VoxelRenderer';
+import { VoxelRenderer, VoxelRendererRef } from './VoxelRenderer';
 
 export const VoxelViewer: React.FC = () => {
   const {
@@ -15,8 +15,55 @@ export const VoxelViewer: React.FC = () => {
     loadFileFromPath,
     openAsText,
     reportError,
+    saveImage,
   } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
+  const rendererRef = useRef<VoxelRendererRef>(null);
+
+  // 画像保存ハンドラ - VSCode APIを使用
+  const handleSaveImage = useCallback(async () => {
+    try {
+      if (!rendererRef.current) {
+        reportError('レンダラーが初期化されていません');
+        return;
+      }
+
+      // 画像をキャプチャ
+      const dataURL = await rendererRef.current.captureImage();
+
+      // デフォルトのファイル名を生成
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const defaultFileName = voxelData?.fileName
+        ? `${voxelData.fileName.replace(/\.les(\.gz)?$/i, '')}_${timestamp}.png`
+        : `voxel_${timestamp}.png`;
+
+      // VSCode拡張機能に保存を依頼（元のファイルパスも送信）
+      saveImage(dataURL, defaultFileName, voxelData?.filePath);
+    } catch (error) {
+      console.error('画像の保存に失敗しました:', error);
+      reportError(
+        `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }, [voxelData, reportError, saveImage]);
+
+  // Ctrl+Sショートカット
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl+S (Windows/Linux) または Cmd+S (Mac)
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        if (voxelData) {
+          handleSaveImage();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [voxelData, handleSaveImage]);
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -175,8 +222,10 @@ export const VoxelViewer: React.FC = () => {
       }}
     >
       {dropOverlay}
-      {voxelData && <VoxelRenderer voxelData={voxelData} settings={settings} />}
-      {voxelData && <HeaderInfo voxelData={voxelData} onOpenAsText={openAsText} />}
+      {voxelData && <VoxelRenderer ref={rendererRef} voxelData={voxelData} settings={settings} />}
+      {voxelData && (
+        <HeaderInfo voxelData={voxelData} onOpenAsText={openAsText} onSaveImage={handleSaveImage} />
+      )}
     </div>
   );
 };
