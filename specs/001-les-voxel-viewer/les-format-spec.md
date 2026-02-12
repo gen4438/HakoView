@@ -1,8 +1,7 @@
 # leS Format Specification
 
 **Feature**: 001-les-voxel-viewer  
-**最終更新**: 2026-02-12  
-**原典**: GeoDict voxel data format
+**最終更新**: 2026-02-12
 
 このドキュメントは、実装で扱う.leSファイル形式の仕様を定義します。
 
@@ -229,7 +228,7 @@ interface LesFile {
 
 ```typescript
 function parseLes(content: string): LesFile {
-  const lines = content.split("\n").filter((line) => line.trim());
+  const lines = content.split('\n').filter((line) => line.trim());
 
   // ヘッダーパース
   const headerParts = lines[0].split(/\s+/);
