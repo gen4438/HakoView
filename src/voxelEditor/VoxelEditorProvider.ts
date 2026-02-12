@@ -86,6 +86,10 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
     try {
       console.log('Resolving custom editor for:', document.uri.toString());
 
+      // Webviewパネルのタイトルを設定
+      const fileName = document.uri.path.split('/').pop() || 'Voxel Viewer';
+      webviewPanel.title = fileName;
+
       // Webviewオプション設定
       webviewPanel.webview.options = {
         enableScripts: true,

@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
 import vertexShader from './shaders/voxel.vert';
 import fragmentShader from './shaders/voxel.frag';
+import { ScaleBar } from './components/ScaleBar';
 
 // カスタムシェーダーマテリアルを定義
 const VoxelShaderMaterial = shaderMaterial(
@@ -366,7 +367,8 @@ function VoxelMesh(props: VoxelMeshProps) {
   // 3Dテクスチャ作成
   const dataTexture = useMemo(() => {
     const { dimensions, values } = voxelData;
-    const uint8Array = new Uint8Array(values);
+    // valuesが既にUint8Arrayの場合はそのまま使用、number[]の場合は変換
+    const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
 
     const texture = new THREE.Data3DTexture(uint8Array, dimensions.x, dimensions.y, dimensions.z);
 
@@ -564,7 +566,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // デフォルト値を保存
     const defaultValues = useRef({
       fov: 50,
-      far: 1000,
+      far: 2000, // 大きなモデル（600³など）に対応
       alpha: 1.0,
       lightIntensity: 0.8,
       ambientIntensity: 0.4,
@@ -582,6 +584,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       customNormalZ: 1,
       customDistance: 0,
       usePerspective: true,
+      showScaleBar: true,
     });
 
     // Levaから独立した状態更新関数
@@ -639,6 +642,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             customNormalY: defaultValues.current.customNormalY,
             customNormalZ: defaultValues.current.customNormalZ,
             customDistance: defaultValues.current.customDistance,
+            showScaleBar: defaultValues.current.showScaleBar,
             ...voxelResetValues,
           });
 
@@ -791,6 +795,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           },
           { collapsed: true }
         ),
+        display: folder(
+          {
+            showScaleBar: { value: true, label: 'Scale Bar' },
+          },
+          { collapsed: true }
+        ),
       }),
       [maxDpr, updateValueVisibility, updateCustomColor]
     );
@@ -842,6 +852,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       customNormalY,
       customNormalZ,
       customDistance,
+      showScaleBar,
     } = controls;
 
     // キーボードショートカット
@@ -901,6 +912,18 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
     const clippingPlane = calculateClippingPlane();
     const effectiveDpr = Math.min(Math.max(dpr, 0.5), maxDpr);
+
+    // モデルのサイズに基づいて適切なカメラfarを自動計算
+    const autoFar = useMemo(() => {
+      const { x, y, z } = voxelData.dimensions;
+      // モデルの対角線の長さ
+      const diagonal = Math.sqrt(x * x + y * y + z * z);
+      // モデルを十分にカバーできる距離（対角線の5倍程度）
+      return diagonal * 5;
+    }, [voxelData.dimensions]);
+
+    // 自動計算されたfarとユーザー指定のfarの大きい方を使用
+    const effectiveFar = Math.max(autoFar, far);
 
     // モデル全体が画面に収まるカメラ初期位置を計算
     const [cameraPosition] = useState((): [number, number, number] => {
@@ -1006,7 +1029,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               position={cameraPosition}
               up={[0, 0, 1]}
               fov={fov}
-              far={far}
+              far={effectiveFar}
             />
           ) : (
             <OrthographicCamera
@@ -1015,7 +1038,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               up={[0, 0, 1]}
               zoom={orthoInitialZoomRef.current}
               near={0.1}
-              far={far}
+              far={effectiveFar}
             />
           )}
 
@@ -1057,6 +1080,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             valueVisibility={valueVisibility}
             customColors={customColors}
           />
+
+          {showScaleBar && (
+            <ScaleBar dimensions={voxelData.dimensions} voxelLength={voxelData.voxelLength} />
+          )}
 
           <gridHelper
             args={[100, 10]}
