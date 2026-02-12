@@ -9,8 +9,12 @@ uniform vec3 uColor;
 uniform float uAlpha;
 uniform float uLightIntensity; // ライトの拡散成分の強度
 uniform float uAmbientIntensity; // アンビエント光の強度
-uniform vec4 uClippingPlane; // クリッピングプレーン (normal.xyz, distance)
+uniform vec4 uClippingPlane; // クリッピングプレーン (normal.xyz, distance) - Custom mode用
 uniform float uEnableClipping; // クリッピング有効フラグ
+uniform float uClippingMode; // 0=off, 1=slice, 2=custom
+uniform float uSliceAxis; // 0=X, 1=Y, 2=Z
+uniform float uSliceDistance1; // Slice 1の距離
+uniform float uSliceDistance2; // Slice 2の距離
 uniform float uCameraDistance; // カメラからの距離
 uniform float uEnableEdgeHighlight; // エッジ強調有効フラグ
 uniform float uEdgeThickness; // エッジの太さ
@@ -96,38 +100,84 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     // --- クリッピング面との交差を統一的に処理 ---
     bool clippedAtEnter = false;
     if (uEnableClipping > 0.5) {
-        // レイの開始点と終了点がクリッピング面のどちら側にあるかを判定
-        vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
-        vec3 rayEnd = originWS + directionWS * tExit;
-        
-        float startSide = dot(uClippingPlane.xyz, rayStart) - uClippingPlane.w;
-        float endSide = dot(uClippingPlane.xyz, rayEnd) - uClippingPlane.w;
-        
-        // 表示側（負側）のみ表示
-        // 両方が正側（非表示側）なら何も描画しない
-        if (startSide > 0.0 && endSide > 0.0) {
-            discard;
-        }
-        
-        // 交差がある場合のみ交差点を計算
-        if ((startSide > 0.0) != (endSide > 0.0)) {
-            float nDotDir = dot(uClippingPlane.xyz, directionWS);
-            if (abs(nDotDir) > 1e-6) {
-                float tClip = (uClippingPlane.w - dot(uClippingPlane.xyz, originWS)) / nDotDir;
-                
-                if (startSide > 0.0) {
-                    // 開始点が非表示側 → 交差点から開始
-                    tEnter = max(tEnter, tClip);
+        if (uClippingMode < 0.5) {
+            // Mode 0: Off (何もしない)
+        } else if (uClippingMode < 1.5) {
+            // Mode 1: Slice (2面スライス)
+            vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
+            vec3 rayEnd = originWS + directionWS * tExit;
+
+            // 軸方向の座標を取得
+            float startCoord = (int(uSliceAxis) == 0) ? rayStart.x :
+                               (int(uSliceAxis) == 1) ? rayStart.y : rayStart.z;
+            float endCoord = (int(uSliceAxis) == 0) ? rayEnd.x :
+                             (int(uSliceAxis) == 1) ? rayEnd.y : rayEnd.z;
+
+            // スライス1（正方向カット面）: coord < distance1 の部分を表示
+            // スライス2（逆方向カット面）: coord > distance2 の部分を表示
+            // つまり、distance2 < coord < distance1 の範囲を表示
+
+            float minDist = min(uSliceDistance1, uSliceDistance2);
+            float maxDist = max(uSliceDistance1, uSliceDistance2);
+
+            // 両端点が範囲外なら描画しない
+            if ((startCoord < minDist && endCoord < minDist) ||
+                (startCoord > maxDist && endCoord > maxDist)) {
+                discard;
+            }
+
+            // 範囲との交差を計算
+            float dirCoord = (int(uSliceAxis) == 0) ? directionWS.x :
+                             (int(uSliceAxis) == 1) ? directionWS.y : directionWS.z;
+            float originCoord = (int(uSliceAxis) == 0) ? originWS.x :
+                                (int(uSliceAxis) == 1) ? originWS.y : originWS.z;
+
+            if (abs(dirCoord) > 1e-6) {
+                float t1 = (minDist - originCoord) / dirCoord;
+                float t2 = (maxDist - originCoord) / dirCoord;
+                float tMin = min(t1, t2);
+                float tMax = max(t1, t2);
+
+                // レイがスライス範囲に入る/出る位置でtEnter/tExitを調整
+                if (startCoord < minDist || startCoord > maxDist) {
+                    tEnter = max(tEnter, tMin);
                     clippedAtEnter = true;
-                } else {
-                    // 終了点が非表示側 → 交差点で終了
-                    tExit = min(tExit, tClip);
+                }
+                if (endCoord < minDist || endCoord > maxDist) {
+                    tExit = min(tExit, tMax);
                 }
             }
+
+            if (tExit <= max(tEnter, 0.0)) discard;
+        } else {
+            // Mode 2: Custom (従来の1面クリッピング)
+            vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
+            vec3 rayEnd = originWS + directionWS * tExit;
+
+            float startSide = dot(uClippingPlane.xyz, rayStart) - uClippingPlane.w;
+            float endSide = dot(uClippingPlane.xyz, rayEnd) - uClippingPlane.w;
+
+            // 表示側（負側）のみ表示
+            if (startSide > 0.0 && endSide > 0.0) {
+                discard;
+            }
+
+            if ((startSide > 0.0) != (endSide > 0.0)) {
+                float nDotDir = dot(uClippingPlane.xyz, directionWS);
+                if (abs(nDotDir) > 1e-6) {
+                    float tClip = (uClippingPlane.w - dot(uClippingPlane.xyz, originWS)) / nDotDir;
+
+                    if (startSide > 0.0) {
+                        tEnter = max(tEnter, tClip);
+                        clippedAtEnter = true;
+                    } else {
+                        tExit = min(tExit, tClip);
+                    }
+                }
+            }
+
+            if (tExit <= max(tEnter, 0.0)) discard;
         }
-        
-        // 範囲チェック
-        if (tExit <= max(tEnter, 0.0)) discard;
     }
 
     // --- レイ開始（境界直後から開始してズレを防ぐ） ---
@@ -164,11 +214,19 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
     // （外部スタート時のみ）入口面の即時ヒット確定
     if (!insideStart && prevOccupied) {
         vec3 n;
-        
+
         // クリッピング面で開始した場合は、クリッピング面の法線を使用
         if (clippedAtEnter && uEnableClipping > 0.5) {
-            // クリッピング面の法線をそのまま使用
-            n = normalize(uClippingPlane.xyz);
+            if (uClippingMode < 1.5 && uClippingMode > 0.5) {
+                // Sliceモード: 軸方向の法線
+                n = vec3(0.0);
+                if (int(uSliceAxis) == 0) n.x = sign(direction.x);
+                else if (int(uSliceAxis) == 1) n.y = sign(direction.y);
+                else n.z = sign(direction.z);
+            } else {
+                // Customモード: クリッピング面の法線
+                n = normalize(uClippingPlane.xyz);
+            }
         } else {
             // どの軸のスラブで入射したか（tEnter は tMin3 の最大）
             int entryAxis = 0;

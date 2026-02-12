@@ -40,6 +40,10 @@ const VoxelShaderMaterial = shaderMaterial(
     uModelMatrixInverse: new THREE.Matrix4(),
     uClippingPlane: new THREE.Vector4(0, 1, 0, 0),
     uEnableClipping: 0.0,
+    uClippingMode: 0.0, // 0=off, 1=slice, 2=custom
+    uSliceAxis: 0.0, // 0=X, 1=Y, 2=Z
+    uSliceDistance1: 0.0,
+    uSliceDistance2: 0.0,
     uIsOrthographic: 0.0,
     uCameraDistance: 0.0,
     uEnableEdgeHighlight: 1.0,
@@ -314,7 +318,14 @@ interface VoxelMeshProps {
   wireframe: boolean;
   lightIntensity: number;
   ambientIntensity: number;
-  clippingPlane: { normal: THREE.Vector3; distance: number };
+  clippingPlane: {
+    mode: 'off' | 'slice' | 'custom';
+    normal: THREE.Vector3;
+    distance: number;
+    axis: number;
+    distance1: number;
+    distance2: number;
+  };
   enableClipping: boolean;
   enableEdgeHighlight: boolean;
   edgeThickness: number;
@@ -432,13 +443,24 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uAmbientIntensity.value = ambientIntensity;
 
     // クリッピング
-    u.uClippingPlane.value.set(
-      clippingPlane.normal.x,
-      clippingPlane.normal.y,
-      clippingPlane.normal.z,
-      clippingPlane.distance
-    );
     u.uEnableClipping.value = enableClipping ? 1.0 : 0.0;
+
+    if (clippingPlane.mode === 'slice') {
+      u.uClippingMode.value = 1.0;
+      u.uSliceAxis.value = clippingPlane.axis;
+      u.uSliceDistance1.value = clippingPlane.distance1;
+      u.uSliceDistance2.value = clippingPlane.distance2;
+    } else if (clippingPlane.mode === 'custom') {
+      u.uClippingMode.value = 2.0;
+      u.uClippingPlane.value.set(
+        clippingPlane.normal.x,
+        clippingPlane.normal.y,
+        clippingPlane.normal.z,
+        clippingPlane.distance
+      );
+    } else {
+      u.uClippingMode.value = 0.0;
+    }
 
     // エッジハイライト
     u.uEnableEdgeHighlight.value = enableEdgeHighlight ? 1.0 : 0.0;
@@ -522,6 +544,13 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const [numericBuffer, setNumericBuffer] = useState<string>('');
     const numericBufferTimeoutRef = useRef<number | null>(null);
 
+    // 現在操作対象のスライス（1 or 2）
+    const [activeSlice, setActiveSlice] = useState<1 | 2>(1);
+
+    // 最後に押されたキーを記録（"gg"の実装用）
+    const lastKeyRef = useRef<string>('');
+    const lastKeyTimeoutRef = useRef<number | null>(null);
+
     // Clippingメニューの展開状態を管理
     const [isClippingCollapsed, setIsClippingCollapsed] = useState(true);
 
@@ -562,8 +591,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       edgeMaxDistance: 200,
       clippingMode: 'Off',
       sliceAxis: 'Z',
-      slicePosition: 0, // 後で各軸の半分に設定
-      sliceReverse: false,
+      slicePosition1: 0, // 後で各軸の半分に設定
+      slicePosition2: 0,
       customNormalX: 0,
       customNormalY: 0,
       customNormalZ: 1,
@@ -608,8 +637,9 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const edgeMaxRange = Math.ceil(maxDim * 3);
 
     // デフォルト値の初期化（初回のみ）
-    if (defaultValues.current.slicePosition === 0) {
-      defaultValues.current.slicePosition = maxDim / 2;
+    if (defaultValues.current.slicePosition1 === 0) {
+      defaultValues.current.slicePosition1 = maxDim / 2;
+      defaultValues.current.slicePosition2 = 0;
     }
 
     // Clipping専用のLevaストアを作成
@@ -629,16 +659,20 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               options: ['X', 'Y', 'Z'],
               render: (get: any) => get('clippingMode') === 'Slice',
             },
-            slicePosition: {
-              value: defaultValues.current.slicePosition,
+            slicePosition1: {
+              value: defaultValues.current.slicePosition1,
               min: 0,
               max: sliceRange,
               step: 1,
+              label: 'Slice 1 (Pos)',
               render: (get: any) => get('clippingMode') === 'Slice',
             },
-            sliceReverse: {
-              value: defaultValues.current.sliceReverse,
-              label: 'Reverse Direction',
+            slicePosition2: {
+              value: defaultValues.current.slicePosition2,
+              min: 0,
+              max: sliceRange,
+              step: 1,
+              label: 'Slice 2 (Neg)',
               render: (get: any) => get('clippingMode') === 'Slice',
             },
           },
@@ -822,8 +856,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const {
       clippingMode,
       sliceAxis,
-      slicePosition,
-      sliceReverse,
+      slicePosition1,
+      slicePosition2,
       customNormalX,
       customNormalY,
       customNormalZ,
@@ -861,8 +895,8 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       setClipping({
         clippingMode: defaultValues.current.clippingMode,
         sliceAxis: defaultValues.current.sliceAxis,
-        slicePosition: defaultValues.current.slicePosition,
-        sliceReverse: defaultValues.current.sliceReverse,
+        slicePosition1: defaultValues.current.slicePosition1,
+        slicePosition2: defaultValues.current.slicePosition2,
         customNormalX: defaultValues.current.customNormalX,
         customNormalY: defaultValues.current.customNormalY,
         customNormalZ: defaultValues.current.customNormalZ,
@@ -967,6 +1001,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         window.clearTimeout(numericBufferTimeoutRef.current);
         numericBufferTimeoutRef.current = null;
       }
+      // lastKeyRefもクリア（"gg"の誤動作を防ぐ）
+      lastKeyRef.current = '';
+      if (lastKeyTimeoutRef.current !== null) {
+        window.clearTimeout(lastKeyTimeoutRef.current);
+        lastKeyTimeoutRef.current = null;
+      }
     }, []);
 
     // 数値バッファのタイムアウト設定（2秒後に自動クリア）
@@ -1014,44 +1054,157 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           return;
         }
 
+        // "o": スライス1/2の切り替え
+        if (key === 'o') {
+          clearNumericBuffer();
+          setActiveSlice((prev) => (prev === 1 ? 2 : 1));
+          return;
+        }
+
         // Sliceモード専用のキー
         if (clippingMode === 'Slice') {
-          // 大文字Cでスライス方向逆転
-          if (key === 'C') {
-            clearNumericBuffer();
-            setClipping({ sliceReverse: !sliceReverse });
-            return;
-          }
-
-          // "g"キー: 数値バッファの位置にジャンプ（例: "25g" → position 25）
-          if (key === 'g' || key === 'G') {
-            if (numericBuffer) {
-              const targetPosition = parseInt(numericBuffer, 10);
-              if (!isNaN(targetPosition)) {
-                const clampedPosition = Math.max(0, Math.min(targetPosition, sliceRange));
-                setClipping({ slicePosition: clampedPosition });
+          // "k": 対象スライスを正方向に移動 (up)
+          if (key === 'k') {
+            const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
+            if (!isNaN(amount)) {
+              if (activeSlice === 1) {
+                const newPosition = Math.min(slicePosition1 + amount, sliceRange);
+                setClipping({ slicePosition1: newPosition });
+              } else {
+                const newPosition = Math.min(slicePosition2 + amount, sliceRange);
+                setClipping({ slicePosition2: newPosition });
               }
             }
             clearNumericBuffer();
             return;
           }
 
-          // +/- キー: 数値バッファ分だけスライス位置を調整（例: "10+" → +10移動）
-          if (key === '+' || key === '=') {
+          // "j": 対象スライスを逆方向に移動 (down)
+          if (key === 'j') {
             const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
             if (!isNaN(amount)) {
-              const newPosition = Math.min(slicePosition + amount, sliceRange);
-              setClipping({ slicePosition: newPosition });
+              if (activeSlice === 1) {
+                const newPosition = Math.max(slicePosition1 - amount, 0);
+                setClipping({ slicePosition1: newPosition });
+              } else {
+                const newPosition = Math.max(slicePosition2 - amount, 0);
+                setClipping({ slicePosition2: newPosition });
+              }
             }
             clearNumericBuffer();
             return;
-          } else if (key === '-' || key === '_') {
+          }
+
+          // "K": 両スライスを正方向に移動 (up)
+          if (key === 'K') {
             const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
             if (!isNaN(amount)) {
-              const newPosition = Math.max(slicePosition - amount, 0);
-              setClipping({ slicePosition: newPosition });
+              const newPosition1 = Math.min(slicePosition1 + amount, sliceRange);
+              const newPosition2 = Math.min(slicePosition2 + amount, sliceRange);
+              setClipping({ slicePosition1: newPosition1, slicePosition2: newPosition2 });
             }
             clearNumericBuffer();
+            return;
+          }
+
+          // "J": 両スライスを逆方向に移動 (down)
+          if (key === 'J') {
+            const amount = numericBuffer ? parseInt(numericBuffer, 10) : 1;
+            if (!isNaN(amount)) {
+              const newPosition1 = Math.max(slicePosition1 - amount, 0);
+              const newPosition2 = Math.max(slicePosition2 - amount, 0);
+              setClipping({ slicePosition1: newPosition1, slicePosition2: newPosition2 });
+            }
+            clearNumericBuffer();
+            return;
+          }
+
+          // "g": 対象スライスをジャンプ、または"gg"で最大位置
+          if (key === 'g') {
+            if (numericBuffer) {
+              // 数値バッファがある場合はジャンプ
+              const targetPosition = parseInt(numericBuffer, 10);
+              if (!isNaN(targetPosition)) {
+                const clampedPosition = Math.max(0, Math.min(targetPosition, sliceRange));
+                if (activeSlice === 1) {
+                  setClipping({ slicePosition1: clampedPosition });
+                } else {
+                  setClipping({ slicePosition2: clampedPosition });
+                }
+              }
+              clearNumericBuffer();
+            } else if (lastKeyRef.current === 'g') {
+              // "gg": 最大位置に移動
+              if (activeSlice === 1) {
+                setClipping({ slicePosition1: sliceRange });
+              } else {
+                setClipping({ slicePosition2: sliceRange });
+              }
+              lastKeyRef.current = '';
+            } else {
+              // 最初の"g"を記録
+              lastKeyRef.current = 'g';
+              if (lastKeyTimeoutRef.current !== null) {
+                window.clearTimeout(lastKeyTimeoutRef.current);
+              }
+              lastKeyTimeoutRef.current = window.setTimeout(() => {
+                lastKeyRef.current = '';
+              }, 1000);
+            }
+            return;
+          }
+
+          // "G": 対象スライスを最小位置に移動
+          if (key === 'G') {
+            clearNumericBuffer();
+            if (activeSlice === 1) {
+              setClipping({ slicePosition1: 0 });
+            } else {
+              setClipping({ slicePosition2: 0 });
+            }
+            return;
+          }
+
+          // "M": 対象スライスを中央に移動
+          if (key === 'M') {
+            clearNumericBuffer();
+            if (activeSlice === 1) {
+              setClipping({ slicePosition1: Math.floor(sliceRange / 2) });
+            } else {
+              setClipping({ slicePosition2: Math.floor(sliceRange / 2) });
+            }
+            return;
+          }
+
+          // "H": 対象スライスを最大位置に移動
+          if (key === 'H') {
+            clearNumericBuffer();
+            if (activeSlice === 1) {
+              setClipping({ slicePosition1: sliceRange });
+            } else {
+              setClipping({ slicePosition2: sliceRange });
+            }
+            return;
+          }
+
+          // "L": 対象スライスを最小位置に移動
+          if (key === 'L') {
+            clearNumericBuffer();
+            if (activeSlice === 1) {
+              setClipping({ slicePosition1: 0 });
+            } else {
+              setClipping({ slicePosition2: 0 });
+            }
+            return;
+          }
+
+          // "=": 両方をリセット
+          if (key === '=') {
+            clearNumericBuffer();
+            setClipping({
+              slicePosition1: Math.floor(sliceRange / 2),
+              slicePosition2: 0,
+            });
             return;
           }
         }
@@ -1075,11 +1228,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         switch (key.toLowerCase()) {
           case 'p':
             clearNumericBuffer();
-            set({ usePerspective: true });
-            break;
-          case 'o':
-            clearNumericBuffer();
-            set({ usePerspective: false });
+            set({ usePerspective: !usePerspective });
             break;
           case 'e':
             clearNumericBuffer();
@@ -1109,10 +1258,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       enableEdgeHighlight,
       clippingMode,
       showBoundingBox,
-      slicePosition,
+      slicePosition1,
+      slicePosition2,
       sliceRange,
-      sliceReverse,
       numericBuffer,
+      activeSlice,
+      usePerspective,
       set,
       setClipping,
       setAxisView,
@@ -1125,37 +1276,64 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // クリッピングプレーン計算
     const calculateClippingPlane = () => {
       if (clippingMode === 'Off') {
-        return { normal: new THREE.Vector3(0, 0, 1), distance: 0, enabled: false };
+        return {
+          mode: 'off' as const,
+          normal: new THREE.Vector3(0, 0, 1),
+          distance: 0,
+          enabled: false,
+          axis: 0,
+          distance1: 0,
+          distance2: 0,
+        };
       }
 
       if (clippingMode === 'Slice') {
-        const normal = new THREE.Vector3(0, 0, 0);
         const { x, y, z } = voxelData.dimensions;
-        let distance = 0;
+        let axis = 0; // 0=X, 1=Y, 2=Z
+        let distance1 = 0;
+        let distance2 = 0;
 
-        // 原点を左下隅(x_min, y_min, z_min)として扱う
-        // slicePositionは0〜maxDimの範囲で、0が最小値、maxDimが最大値
+        // 中心からのオフセットに変換
         switch (sliceAxis) {
           case 'X':
-            normal.x = sliceReverse ? -1 : 1;
-            // 中心からのオフセットに変換: slicePosition - x/2
-            distance = sliceReverse ? -(slicePosition - x / 2) : slicePosition - x / 2;
+            axis = 0;
+            distance1 = slicePosition1 - x / 2;
+            distance2 = slicePosition2 - x / 2;
             break;
           case 'Y':
-            normal.y = sliceReverse ? -1 : 1;
-            distance = sliceReverse ? -(slicePosition - y / 2) : slicePosition - y / 2;
+            axis = 1;
+            distance1 = slicePosition1 - y / 2;
+            distance2 = slicePosition2 - y / 2;
             break;
           case 'Z':
-            normal.z = sliceReverse ? -1 : 1;
-            distance = sliceReverse ? -(slicePosition - z / 2) : slicePosition - z / 2;
+            axis = 2;
+            distance1 = slicePosition1 - z / 2;
+            distance2 = slicePosition2 - z / 2;
             break;
         }
 
-        return { normal, distance, enabled: true };
+        return {
+          mode: 'slice' as const,
+          axis,
+          distance1,
+          distance2,
+          enabled: true,
+          normal: new THREE.Vector3(0, 0, 1), // dummy
+          distance: 0, // dummy
+        };
       }
 
+      // Custom mode
       const normal = new THREE.Vector3(customNormalX, customNormalY, customNormalZ).normalize();
-      return { normal, distance: customDistance, enabled: true };
+      return {
+        mode: 'custom' as const,
+        normal,
+        distance: customDistance,
+        enabled: true,
+        axis: 0,
+        distance1: 0,
+        distance2: 0,
+      };
     };
 
     const clippingPlane = calculateClippingPlane();
@@ -1261,6 +1439,30 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           </div>
         </div>
 
+        {/* アクティブスライスインジケーター（Sliceモード時のみ） */}
+        {clippingMode === 'Slice' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '100px',
+              left: '20px',
+              padding: '8px 16px',
+              background: 'rgba(0, 0, 0, 0.7)',
+              color: activeSlice === 1 ? '#00aaff' : '#ff9900',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              fontFamily: 'monospace',
+              borderRadius: '6px',
+              border: `2px solid ${activeSlice === 1 ? '#00aaff' : '#ff9900'}`,
+              zIndex: 1000,
+              pointerEvents: 'none',
+            }}
+          >
+            Slice {activeSlice} {activeSlice === 1 ? '(Pos)' : '(Neg)'}:{' '}
+            {activeSlice === 1 ? slicePosition1 : slicePosition2}
+          </div>
+        )}
+
         {/* 数値バッファ表示（入力中のみ） */}
         {numericBuffer && clippingMode === 'Slice' && (
           <div
@@ -1333,10 +1535,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             wireframe={false}
             lightIntensity={lightIntensity}
             ambientIntensity={ambientIntensity}
-            clippingPlane={{
-              normal: clippingPlane.normal,
-              distance: clippingPlane.distance,
-            }}
+            clippingPlane={clippingPlane}
             enableClipping={clippingPlane.enabled}
             enableEdgeHighlight={enableEdgeHighlight}
             edgeThickness={edgeThickness}
