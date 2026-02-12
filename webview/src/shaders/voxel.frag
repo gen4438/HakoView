@@ -72,7 +72,10 @@ vec4 sampleVoxel(vec3 objCenter) {
     // Visibility はパレットテクスチャの α 値にエンコード済み
     vec3 texel01 = (idx + 0.5) / uVoxelShape;
     float index = texture(uTexture, texel01).r * 255.0;
-    float u = (index + 0.5) / uPaletteSize;
+
+    // 0は空、1-15をカラーマップ、16以上は15周期で循環 (16→1, 17→2, ..., 30→15, 31→1, ...)
+    float paletteIndex = (index < 0.5) ? 0.0 : (mod(index - 1.0, 15.0) + 1.0);
+    float u = (paletteIndex + 0.5) / uPaletteSize;
     return texture(uPaletteTexture, vec2(u, 0.5));
 }
 
