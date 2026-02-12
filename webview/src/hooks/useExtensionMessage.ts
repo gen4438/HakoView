@@ -6,6 +6,7 @@ import type {
   VoxelDataMessage,
   ViewerState,
   VSCodeAPI,
+  ViewerSettings,
 } from '../types/voxel';
 
 // VS Code APIの取得（1回のみ）
@@ -17,6 +18,7 @@ const vscode = acquireVsCodeApi();
  */
 export function useExtensionMessage() {
   const [voxelData, setVoxelData] = useState<VoxelDataMessage | null>(null);
+  const [settings, setSettings] = useState<ViewerSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const loadStartRef = useRef<number | null>(null);
@@ -50,6 +52,10 @@ export function useExtensionMessage() {
         case 'restoreState':
           // 状態復元は後で実装（カメラ位置など）
           console.log('Restoring state:', message.state);
+          break;
+
+        case 'updateSettings':
+          setSettings(message.settings);
           break;
 
         case 'showError':
@@ -159,6 +165,7 @@ export function useExtensionMessage() {
 
   return {
     voxelData,
+    settings,
     error,
     isLoading,
     loadFile,

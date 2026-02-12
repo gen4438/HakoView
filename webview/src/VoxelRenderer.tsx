@@ -12,7 +12,7 @@ import {
 import { folder, useControls, Leva, button } from 'leva';
 import { useWindowSize } from 'react-use';
 import * as THREE from 'three';
-import type { VoxelDataMessage } from './types/voxel';
+import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
 import vertexShader from './shaders/voxel.vert';
 import fragmentShader from './shaders/voxel.frag';
 
@@ -62,6 +62,7 @@ declare module 'react' {
 
 interface VoxelRendererProps {
   voxelData: VoxelDataMessage;
+  settings: ViewerSettings | null;
 }
 
 // OrthographicCamera用のカスタムズームハンドラ
@@ -329,7 +330,7 @@ function VoxelMesh(props: VoxelMeshProps) {
   );
 }
 
-export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
+export function VoxelRenderer({ voxelData, settings }: VoxelRendererProps) {
   // TrackballControlsのrefを作成
   const controlsRef = useRef<any>(null);
 
@@ -339,8 +340,9 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
       dimensions: voxelData.dimensions,
       voxelLength: voxelData.voxelLength,
       valuesLength: voxelData.values.length,
+      settings,
     });
-  }, [voxelData]);
+  }, [voxelData, settings]);
 
   // ボクセル値表示制御の状態（0は初期値非表示）
   const [valueVisibility, setValueVisibility] = useState<boolean[]>(
@@ -387,6 +389,7 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
   }, []);
 
   const updateCustomColor = useCallback((index: number, value: string) => {
+    console.log(`Color updated: index=${index}, value=${value}`);
     setCustomColors((prev) => {
       const newColors = [...prev];
       newColors[index] = value;
@@ -479,17 +482,23 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
       ),
       voxelColors: folder(
         {
-          // 0-15値制御を動的生成（0も他と同じ扱い）
+          // 0-15値制御を動的生成
           ...Array.from({ length: 16 }, (_, i) => i).reduce(
             (acc, i) => ({
               ...acc,
               [`visible${i}`]: {
-                value: valueVisibility[i],
-                onChange: (value: boolean) => updateValueVisibility(i, value),
+                value: i !== 0, // 初期値
+                onChange: (value: boolean) => {
+                  // 状態を更新
+                  updateValueVisibility(i, value);
+                },
               },
               [`color${i}`]: {
-                value: customColors[i],
-                onChange: (value: string) => updateCustomColor(i, value),
+                value: defaultPalette[i] || '#000000', // 初期値
+                onChange: (value: string) => {
+                  // 状態を更新
+                  updateCustomColor(i, value);
+                },
               },
             }),
             {}
@@ -578,8 +587,34 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
         { collapsed: true }
       ),
     }),
-    [maxDpr, updateValueVisibility, updateCustomColor, valueVisibility, customColors]
+    [maxDpr, updateValueVisibility, updateCustomColor]
   );
+
+  // 設定が変更されたらカスタム色を更新
+  useEffect(() => {
+    if (settings?.colormap) {
+      setCustomColors((prev) => {
+        const newColors = [...prev];
+        // 設定オブジェクトから色を適用 (0-15)
+        Object.entries(settings.colormap || {}).forEach(([key, color]) => {
+          const index = parseInt(key, 10);
+          if (!isNaN(index) && index >= 0 && index < 16) {
+            newColors[index] = color;
+          }
+        });
+        return newColors;
+      });
+
+      const voxelResetValues: Record<string, any> = {};
+      Object.entries(settings.colormap || {}).forEach(([key, color]) => {
+        const index = parseInt(key, 10);
+        if (!isNaN(index) && index >= 0 && index < 16) {
+          voxelResetValues[`color${index}`] = color;
+        }
+      });
+      set(voxelResetValues);
+    }
+  }, [settings, set]);
 
   const {
     usePerspective,
@@ -603,6 +638,31 @@ export function VoxelRenderer({ voxelData }: VoxelRendererProps) {
     customNormalZ,
     customDistance,
   } = controls;
+
+  // キーボードショートカット
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
+
+      switch (event.key.toLowerCase()) {
+        case 'p':
+          set({ usePerspective: true });
+          break;
+        case 'o':
+          set({ usePerspective: false });
+          break;
+        case 'e':
+          set({ enableEdgeHighlight: !enableEdgeHighlight });
+          break;
+        case 'c':
+          set({ clippingMode: clippingMode === 'Off' ? 'Slice' : 'Off' });
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [enableEdgeHighlight, clippingMode, set]);
 
   // クリッピングプレーン計算
   const calculateClippingPlane = () => {

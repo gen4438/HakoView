@@ -5,7 +5,7 @@ import { LoadingState } from './components/LoadingState';
 import { VoxelRenderer } from './VoxelRenderer';
 
 export const VoxelViewer: React.FC = () => {
-  const { voxelData, error, isLoading, loadFile, loadFileFromPath, reportError } =
+  const { voxelData, settings, error, isLoading, loadFile, loadFileFromPath, reportError } =
     useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -160,7 +160,7 @@ export const VoxelViewer: React.FC = () => {
       }}
     >
       {dropOverlay}
-      <VoxelRenderer voxelData={voxelData} />
+      <VoxelRenderer voxelData={voxelData} settings={settings} />
     </div>
   );
 };

@@ -1,7 +1,12 @@
 import * as vscode from 'vscode';
 import { VoxelDocument } from './VoxelDocument';
 import { getWebviewHtml } from './getWebviewHtml';
-import { sendVoxelData, sendError, WebviewToExtensionMessage } from './messaging';
+import {
+  sendVoxelData,
+  sendError,
+  WebviewToExtensionMessage,
+  postMessageToWebview,
+} from './messaging';
 import { LesParser } from '../voxelParser/LesParser';
 import { ParseError } from '../voxelParser/validation';
 import { registerViewerPanel } from './panelRegistry';
@@ -178,13 +183,41 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   }
 
   /**
+   * 設定をWebviewに送信
+   */
+  private sendSettings(webview: vscode.Webview): void {
+    const config = vscode.workspace.getConfiguration('hakoview');
+    const colormap = config.get<Record<string, string>>('defaultColormap');
+
+    postMessageToWebview(webview, {
+      type: 'updateSettings',
+      settings: {
+        colormap,
+      },
+    });
+  }
+
+  /**
    * Webviewメッセージハンドリング設定
    */
   private setupMessageHandling(document: VoxelDocument, webviewPanel: vscode.WebviewPanel): void {
+    // 設定変更の監視
+    const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('hakoview.defaultColormap')) {
+        this.sendSettings(webviewPanel.webview);
+      }
+    });
+
+    // パネル破棄時にリスナーを解除
+    webviewPanel.onDidDispose(() => {
+      configListener.dispose();
+    });
+
     webviewPanel.webview.onDidReceiveMessage(async (message: WebviewToExtensionMessage) => {
       switch (message.command) {
         case 'ready':
-          // Webview準備完了時に再送信
+          // Webview準備完了時にデータを送信
+          this.sendSettings(webviewPanel.webview);
           if (document.dataset) {
             sendVoxelData(webviewPanel.webview, document.dataset);
           } else if (document.error) {

@@ -65,6 +65,36 @@
           "when": "resourceExtname == .leS"
         }
       ]
+    },
+    "configuration": {
+      "title": "Hako View",
+      "properties": {
+        "hakoview.defaultColormap": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {
+            "0": "#FFFFFF",
+            "1": "#0000FF",
+            "2": "#FF0000",
+            "3": "#FFFF00",
+            "4": "#00FF00",
+            "5": "#FF00FF",
+            "6": "#1F77B4",
+            "7": "#FF7F0E",
+            "8": "#2CA02C",
+            "9": "#D62728",
+            "10": "#9467BD",
+            "11": "#8C564B",
+            "12": "#E377C2",
+            "13": "#7F7F7F",
+            "14": "#BCBD22",
+            "15": "#17BECF"
+          },
+          "description": "Default colormap for voxel values. Format: { \"0\": \"#hexcolor\", \"1\": \"#hexcolor\", ... }."
+        }
+      }
     }
   },
   "scripts": {
