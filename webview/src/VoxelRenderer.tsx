@@ -158,6 +158,38 @@ function CaptureHelper({
     const centerGeo = new THREE.SphereGeometry(0.08, 12, 12);
     gScene.add(new THREE.Mesh(centerGeo, new THREE.MeshBasicMaterial({ color: 0x888888 })));
 
+    // 軸ラベル（X, Y, Z）をスプライトとして追加
+    const createTextSprite = (text: string, bgColor: string, pos: [number, number, number]) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      ctx.clearRect(0, 0, 64, 64);
+      // 背景円を描画（軸色）
+      ctx.beginPath();
+      ctx.arc(32, 32, 28, 0, Math.PI * 2);
+      ctx.fillStyle = bgColor;
+      ctx.fill();
+      // テキスト描画（白）
+      ctx.font = 'bold 36px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'white';
+      ctx.fillText(text, 32, 32);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.position.set(...pos);
+      sprite.scale.set(0.5, 0.5, 1);
+      gScene.add(sprite);
+    };
+
+    createTextSprite('X', '#ff0000', [axisLength + 0.3, 0, 0]);
+    createTextSprite('Y', '#00ff00', [0, axisLength + 0.3, 0]);
+    createTextSprite('Z', '#0000ff', [0, 0, axisLength + 0.3]);
+
     // 視錐体を軸サイズに合わせて密にし、ビューポート内でのgizmo占有率を上げる
     const gCamera = new THREE.OrthographicCamera(-1.6, 1.6, 1.6, -1.6, 0.1, 10);
 
@@ -170,6 +202,10 @@ function CaptureHelper({
       gizmoResources.scene.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
+          (obj.material as THREE.Material).dispose();
+        }
+        if (obj instanceof THREE.Sprite) {
+          (obj.material as THREE.SpriteMaterial).map?.dispose();
           (obj.material as THREE.Material).dispose();
         }
       });
@@ -201,35 +237,26 @@ function CaptureHelper({
       offRenderer.setSize(width, height, false);
       offRenderer.setPixelRatio(1);
 
-      // カメラのアスペクト比を一時的に変更
+      // カメラをクローンしてオフスクリーン用に設定（メインカメラに影響を与えない）
       const aspect = width / height;
-      let originalAspect: number | undefined;
-      let originalLeft: number | undefined;
-      let originalRight: number | undefined;
-      let originalTop: number | undefined;
-      let originalBottom: number | undefined;
+      const offCamera = camera.clone();
+      offCamera.matrixWorld.copy(camera.matrixWorld);
+      offCamera.matrixWorldInverse.copy(camera.matrixWorldInverse);
 
-      if ((camera as any).isPerspectiveCamera) {
-        const perspCamera = camera as THREE.PerspectiveCamera;
-        originalAspect = perspCamera.aspect;
-        perspCamera.aspect = aspect;
-        perspCamera.updateProjectionMatrix();
-      } else if ((camera as any).isOrthographicCamera) {
-        const orthoCamera = camera as THREE.OrthographicCamera;
-        originalLeft = orthoCamera.left;
-        originalRight = orthoCamera.right;
-        originalTop = orthoCamera.top;
-        originalBottom = orthoCamera.bottom;
-
-        const frustumHeight = orthoCamera.top - orthoCamera.bottom;
+      if ((offCamera as any).isPerspectiveCamera) {
+        (offCamera as THREE.PerspectiveCamera).aspect = aspect;
+        offCamera.updateProjectionMatrix();
+      } else if ((offCamera as any).isOrthographicCamera) {
+        const frustumHeight =
+          (camera as THREE.OrthographicCamera).top - (camera as THREE.OrthographicCamera).bottom;
         const frustumWidth = frustumHeight * aspect;
-        orthoCamera.left = -frustumWidth / 2;
-        orthoCamera.right = frustumWidth / 2;
-        orthoCamera.updateProjectionMatrix();
+        (offCamera as THREE.OrthographicCamera).left = -frustumWidth / 2;
+        (offCamera as THREE.OrthographicCamera).right = frustumWidth / 2;
+        offCamera.updateProjectionMatrix();
       }
 
       // メインシーンをレンダリング
-      offRenderer.render(scene, camera);
+      offRenderer.render(scene, offCamera);
 
       // Gizmoオーバーレイを右下に描画
       const { scene: gScene, camera: gCamera } = gizmoResources;
@@ -253,20 +280,6 @@ function CaptureHelper({
       offRenderer.setScissor(gizmoX, gizmoY, gizmoSize, gizmoSize);
       offRenderer.clearDepth();
       offRenderer.render(gScene, gCamera);
-
-      // カメラを元に戻す
-      if ((camera as any).isPerspectiveCamera && originalAspect !== undefined) {
-        const perspCamera = camera as THREE.PerspectiveCamera;
-        perspCamera.aspect = originalAspect;
-        perspCamera.updateProjectionMatrix();
-      } else if ((camera as any).isOrthographicCamera && originalLeft !== undefined) {
-        const orthoCamera = camera as THREE.OrthographicCamera;
-        orthoCamera.left = originalLeft!;
-        orthoCamera.right = originalRight!;
-        orthoCamera.top = originalTop!;
-        orthoCamera.bottom = originalBottom!;
-        orthoCamera.updateProjectionMatrix();
-      }
 
       const dataUrl = offCanvas.toDataURL('image/png');
       offRenderer.dispose();
