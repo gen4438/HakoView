@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as zlib from 'zlib';
 import { VoxelDocument } from './VoxelDocument';
 import { getWebviewHtml } from './getWebviewHtml';
 import {
@@ -227,7 +228,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 
         case 'loadFile':
           try {
-            const data = new Uint8Array(message.data);
+            let data = new Uint8Array(message.data);
+
+            // gzip圧縮されているか確認
+            if (message.fileName.toLowerCase().endsWith('.gz')) {
+              data = zlib.gunzipSync(data);
+            }
+
             const dataset = LesParser.parse(data, message.fileName);
             sendVoxelData(webviewPanel.webview, dataset, true);
             webviewPanel.title = message.fileName;
@@ -253,8 +260,13 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             }
 
             // ファイルを読み込み
-            const fileData = await vscode.workspace.fs.readFile(uri);
+            let fileData = await vscode.workspace.fs.readFile(uri);
             const fileName = uri.path.split('/').pop() || 'unknown.leS';
+
+            // gzip圧縮されているか確認
+            if (fileName.toLowerCase().endsWith('.gz')) {
+              fileData = zlib.gunzipSync(fileData);
+            }
 
             // パース
             const dataset = LesParser.parse(fileData, fileName);
@@ -287,6 +299,46 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 
         case 'reportMetrics':
           console.log('Voxel rendering metrics:', message.metrics);
+          break;
+
+        case 'saveImage':
+          // 画像保存ダイアログを表示
+          try {
+            // 元のファイルと同じディレクトリをデフォルトにする
+            let defaultUri: vscode.Uri;
+            if (message.originalFilePath) {
+              const originalUri = vscode.Uri.parse(message.originalFilePath);
+              const directory = vscode.Uri.joinPath(originalUri, '..');
+              defaultUri = vscode.Uri.joinPath(directory, message.defaultFileName);
+            } else {
+              // ドキュメントのURIを使用
+              const directory = vscode.Uri.joinPath(document.uri, '..');
+              defaultUri = vscode.Uri.joinPath(directory, message.defaultFileName);
+            }
+
+            const saveUri = await vscode.window.showSaveDialog({
+              defaultUri,
+              filters: {
+                PNG画像: ['png'],
+              },
+              saveLabel: '保存',
+            });
+
+            if (saveUri) {
+              // Base64データからバイナリに変換
+              const base64Data = message.imageData.split(',')[1];
+              const buffer = Buffer.from(base64Data, 'base64');
+
+              // ファイルに書き込み
+              await vscode.workspace.fs.writeFile(saveUri, buffer);
+
+              // 成功メッセージを表示
+              vscode.window.showInformationMessage(`画像を保存しました: ${saveUri.fsPath}`);
+            }
+          } catch (error) {
+            const errorMessage = `画像の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
+            vscode.window.showErrorMessage(errorMessage);
+          }
           break;
       }
     });

@@ -29,7 +29,8 @@ export type WebviewToExtensionMessage =
   | { command: 'saveState'; state: ViewerState }
   | { command: 'showError'; message: string }
   | { command: 'openAsText' }
-  | { command: 'reportMetrics'; metrics: RenderingMetrics };
+  | { command: 'reportMetrics'; metrics: RenderingMetrics }
+  | { command: 'saveImage'; imageData: string; defaultFileName: string; originalFilePath?: string };
 
 /**
  * ボクセルデータメッセージ（postMessage用にUint8Array→Array変換）

@@ -163,6 +163,18 @@ export function useExtensionMessage() {
     });
   };
 
+  /**
+   * 画像を保存
+   */
+  const saveImage = (imageData: string, defaultFileName: string, originalFilePath?: string) => {
+    postMessage({
+      command: 'saveImage',
+      imageData,
+      defaultFileName,
+      originalFilePath,
+    });
+  };
+
   return {
     voxelData,
     settings,
@@ -173,5 +185,6 @@ export function useExtensionMessage() {
     saveState,
     openAsText,
     reportError,
+    saveImage,
   };
 }
