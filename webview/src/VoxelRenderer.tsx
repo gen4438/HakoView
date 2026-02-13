@@ -1254,33 +1254,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const [controls, set] = useControls(
       () => ({
         Reset: button(() => resetAllSettings()),
-        usePerspective: { value: true, label: 'Perspective' },
-        useOccupancy: { value: true, label: 'Occupancy Grid' },
-        edgeHighlight: folder(
-          {
-            enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
-            edgeThickness: {
-              value: defaultValues.current.edgeThickness,
-              min: 0.02,
-              max: 0.15,
-              step: 0.01,
-            },
-            edgeColor: { value: defaultValues.current.edgeColor },
-            edgeIntensity: {
-              value: defaultValues.current.edgeIntensity,
-              min: 0.0,
-              max: 1.0,
-              step: 0.01,
-            },
-            edgeMaxDistance: {
-              value: defaultValues.current.edgeMaxDistance,
-              min: 50,
-              max: Math.max(edgeMaxRange, 200),
-              step: 10,
-            },
-          },
-          { collapsed: true }
-        ),
         voxelColors: folder(
           {
             'Copy Colors': button(() => copyColorsToClipboard()),
@@ -1310,11 +1283,16 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           },
           { collapsed: true }
         ),
-        dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
-        alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
         camera: folder(
           {
-            fov: { value: defaultValues.current.fov, min: 0, max: 180, step: 5 },
+            usePerspective: { value: true, label: 'Perspective' },
+            fov: {
+              value: defaultValues.current.fov,
+              min: 0,
+              max: 180,
+              step: 5,
+              render: (get) => get('camera.usePerspective'),
+            },
             far: { value: defaultValues.current.far, min: 500, max: 3000, step: 100 },
           },
           { collapsed: true }
@@ -1338,6 +1316,34 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         ),
         display: folder(
           {
+            dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
+            alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
+            useOccupancy: { value: true, label: 'Occupancy Grid' },
+            edgeHighlight: folder(
+              {
+                enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
+                edgeThickness: {
+                  value: defaultValues.current.edgeThickness,
+                  min: 0.02,
+                  max: 0.15,
+                  step: 0.01,
+                },
+                edgeColor: { value: defaultValues.current.edgeColor },
+                edgeIntensity: {
+                  value: defaultValues.current.edgeIntensity,
+                  min: 0.0,
+                  max: 1.0,
+                  step: 0.01,
+                },
+                edgeMaxDistance: {
+                  value: defaultValues.current.edgeMaxDistance,
+                  min: 50,
+                  max: Math.max(edgeMaxRange, 200),
+                  step: 10,
+                },
+              },
+              { collapsed: true }
+            ),
             showScaleBar: { value: true, label: 'Scale Bar' },
             showBoundingBox: { value: false, label: 'Bounding Box' },
             showGrid: { value: true, label: 'Grid' },
@@ -1507,6 +1513,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
       // すべての設定をデフォルト値に戻す
       set({
+        usePerspective: defaultValues.current.usePerspective,
         alpha: defaultValues.current.alpha,
         dpr: maxDpr,
         fov: defaultValues.current.fov,
