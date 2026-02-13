@@ -751,11 +751,10 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [customColors, valueVisibility]);
 
-  // Occupancy Grid テクスチャ（動的ブロックサイズの占有情報）
-  // ブロックサイズはグリッドの最大次元に応じてスケーリング:
-  //   Occupancy Grid が各軸 ~32 ブロックになるよう調整（2のべき乗、最小8・最大64）
-  //   大きなグリッドでは大きなブロックで空領域を効率的にスキップ
-  const occupancyData = useMemo(() => {
+  // ブロック単位のパレットインデックス存在ビットマスクを事前計算（voxelData依存のみ）
+  // 各ブロックにどのパレットインデックス(0-15)が存在するかを16bitマスクで保持
+  // これにより valueVisibility 変更時は O(blocks) で occupancy を再構築できる
+  const blockMaskData = useMemo(() => {
     const { dimensions, values } = voxelData;
     const maxDim = Math.max(dimensions.x, dimensions.y, dimensions.z);
     const blockSize = Math.max(
@@ -765,7 +764,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     const occX = Math.ceil(dimensions.x / blockSize);
     const occY = Math.ceil(dimensions.y / blockSize);
     const occZ = Math.ceil(dimensions.z / blockSize);
-    const occData = new Uint8Array(occX * occY * occZ);
+    const masks = new Uint16Array(occX * occY * occZ);
     const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
 
     for (let bx = 0; bx < occX; bx++) {
@@ -777,22 +776,46 @@ function VoxelMesh(props: VoxelMeshProps) {
         for (let bz = 0; bz < occZ; bz++) {
           const zStart = bz * blockSize;
           const zEnd = Math.min(zStart + blockSize, dimensions.z);
-          let occupied = false;
-          for (let x = xStart; x < xEnd && !occupied; x++) {
-            for (let y = yStart; y < yEnd && !occupied; y++) {
+          let mask = 0;
+          for (let x = xStart; x < xEnd; x++) {
+            for (let y = yStart; y < yEnd; y++) {
               for (let z = zStart; z < zEnd; z++) {
-                // LesParser と同じインデックス計算式: x + X * (y + Y * z)
                 const index = x + dimensions.x * (y + dimensions.y * z);
-                if (uint8Array[index] !== 0) {
-                  occupied = true;
-                  break;
+                const voxelValue = uint8Array[index];
+                if (voxelValue === 0) {
+                  mask |= 1; // bit 0: 値0のボクセルが存在
+                } else {
+                  const paletteIndex = ((voxelValue - 1) % 15) + 1;
+                  mask |= 1 << paletteIndex;
                 }
               }
             }
+            // 全ビット埋まったら早期終了（これ以上変わらない）
+            if (mask === 0xffff) break;
           }
-          occData[bx + occX * (by + occY * bz)] = occupied ? 255 : 0;
+          masks[bx + occX * (by + occY * bz)] = mask;
         }
       }
+    }
+
+    return { masks, occX, occY, occZ, blockSize };
+  }, [voxelData]);
+
+  // Occupancy Grid テクスチャ（valueVisibility変更時は O(blocks) で再構築）
+  const occupancyData = useMemo(() => {
+    const { masks, occX, occY, occZ, blockSize } = blockMaskData;
+    const totalBlocks = occX * occY * occZ;
+    const occData = new Uint8Array(totalBlocks);
+
+    // valueVisibility を 16bit マスクに変換（値0も含む）
+    let visMask = 0;
+    for (let i = 0; i < 16; i++) {
+      if (valueVisibility[i]) visMask |= 1 << i;
+    }
+
+    // ブロックごとに AND でチェック（O(blocks)、ボクセル走査なし）
+    for (let b = 0; b < totalBlocks; b++) {
+      occData[b] = (masks[b] & visMask) !== 0 ? 255 : 0;
     }
 
     const texture = new THREE.Data3DTexture(occData, occX, occY, occZ);
@@ -804,7 +827,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     texture.needsUpdate = true;
 
     return { texture, dimensions: new THREE.Vector3(occX, occY, occZ), blockSize };
-  }, [voxelData]);
+  }, [blockMaskData, valueVisibility]);
 
   // テクスチャの破棄（GPUメモリリーク防止）
   useEffect(() => {
@@ -1231,33 +1254,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const [controls, set] = useControls(
       () => ({
         Reset: button(() => resetAllSettings()),
-        usePerspective: { value: true, label: 'Perspective' },
-        useOccupancy: { value: true, label: 'Occupancy Grid' },
-        edgeHighlight: folder(
-          {
-            enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
-            edgeThickness: {
-              value: defaultValues.current.edgeThickness,
-              min: 0.02,
-              max: 0.15,
-              step: 0.01,
-            },
-            edgeColor: { value: defaultValues.current.edgeColor },
-            edgeIntensity: {
-              value: defaultValues.current.edgeIntensity,
-              min: 0.0,
-              max: 1.0,
-              step: 0.01,
-            },
-            edgeMaxDistance: {
-              value: defaultValues.current.edgeMaxDistance,
-              min: 50,
-              max: Math.max(edgeMaxRange, 200),
-              step: 10,
-            },
-          },
-          { collapsed: true }
-        ),
         voxelColors: folder(
           {
             'Copy Colors': button(() => copyColorsToClipboard()),
@@ -1287,11 +1283,16 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           },
           { collapsed: true }
         ),
-        dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
-        alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
         camera: folder(
           {
-            fov: { value: defaultValues.current.fov, min: 0, max: 180, step: 5 },
+            usePerspective: { value: true, label: 'Perspective' },
+            fov: {
+              value: defaultValues.current.fov,
+              min: 0,
+              max: 180,
+              step: 5,
+              render: (get) => get('camera.usePerspective'),
+            },
             far: { value: defaultValues.current.far, min: 500, max: 3000, step: 100 },
           },
           { collapsed: true }
@@ -1315,6 +1316,34 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         ),
         display: folder(
           {
+            dpr: { value: maxDpr, min: 0.5, max: maxDpr, step: 0.1 },
+            alpha: { value: defaultValues.current.alpha, min: 0.0, max: 1.0, step: 0.01 },
+            useOccupancy: { value: true, label: 'Occupancy Grid' },
+            edgeHighlight: folder(
+              {
+                enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
+                edgeThickness: {
+                  value: defaultValues.current.edgeThickness,
+                  min: 0.02,
+                  max: 0.15,
+                  step: 0.01,
+                },
+                edgeColor: { value: defaultValues.current.edgeColor },
+                edgeIntensity: {
+                  value: defaultValues.current.edgeIntensity,
+                  min: 0.0,
+                  max: 1.0,
+                  step: 0.01,
+                },
+                edgeMaxDistance: {
+                  value: defaultValues.current.edgeMaxDistance,
+                  min: 50,
+                  max: Math.max(edgeMaxRange, 200),
+                  step: 10,
+                },
+              },
+              { collapsed: true }
+            ),
             showScaleBar: { value: true, label: 'Scale Bar' },
             showBoundingBox: { value: false, label: 'Bounding Box' },
             showGrid: { value: true, label: 'Grid' },
@@ -1464,6 +1493,16 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     }, []);
 
     // リセット処理を関数化（Resetボタンと"R"キーの両方から使用）
+    // TrackballControlsの慣性（ダンピング）を停止するヘルパー
+    // staticMoving=trueにしてupdate()を呼ぶと、内部の速度ベクトルがゼロになる
+    const stopControlsInertia = useCallback(() => {
+      const controls = controlsRef.current;
+      if (!controls) return;
+      controls.staticMoving = true;
+      controls.update();
+      controls.staticMoving = false;
+    }, []);
+
     const resetAllSettings = useCallback(() => {
       // ボクセル値表示とカスタム色のリセット用オブジェクト
       const voxelResetValues: Record<string, any> = {};
@@ -1474,6 +1513,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
       // すべての設定をデフォルト値に戻す
       set({
+        usePerspective: defaultValues.current.usePerspective,
         alpha: defaultValues.current.alpha,
         dpr: maxDpr,
         fov: defaultValues.current.fov,
@@ -1523,81 +1563,90 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       // カメラ位置もリセット
       if (controlsRef.current) {
         controlsRef.current.reset();
+        stopControlsInertia();
       }
-    }, [set, setClipping, maxDpr]);
+    }, [set, setClipping, maxDpr, stopControlsInertia]);
 
     // 軸視点に移動する関数
-    const setAxisView = useCallback((axis: 'x' | 'y' | 'z') => {
-      if (!controlsRef.current) return;
+    const setAxisView = useCallback(
+      (axis: 'x' | 'y' | 'z') => {
+        if (!controlsRef.current) return;
 
-      // 状態をトグル
-      axisViewState.current[axis] *= -1;
-      const dir = axisViewState.current[axis];
+        // 状態をトグル
+        axisViewState.current[axis] *= -1;
+        const dir = axisViewState.current[axis];
 
-      // 現在のカメラ位置からtargetまでの距離を計算して維持
-      const camera = controlsRef.current.object;
-      const target = controlsRef.current.target;
-      const currentDistance = camera.position.distanceTo(target);
+        // 現在のカメラ位置からtargetまでの距離を計算して維持
+        const camera = controlsRef.current.object;
+        const target = controlsRef.current.target;
+        const currentDistance = camera.position.distanceTo(target);
 
-      // カメラの新しい位置を設定（現在の距離を維持）
-      camera.position.set(
-        axis === 'x' ? dir * currentDistance : 0,
-        axis === 'y' ? dir * currentDistance : 0,
-        axis === 'z' ? dir * currentDistance : 0
-      );
+        // カメラの新しい位置を設定（現在の距離を維持）
+        camera.position.set(
+          axis === 'x' ? dir * currentDistance : 0,
+          axis === 'y' ? dir * currentDistance : 0,
+          axis === 'z' ? dir * currentDistance : 0
+        );
 
-      // up ベクトルを設定（Z軸が上）
-      if (axis === 'x') {
-        camera.up.set(0, 0, 1);
-      } else if (axis === 'y') {
-        camera.up.set(0, 0, 1);
-      } else {
-        // Z軸視点の場合、Y軸を上に
-        camera.up.set(0, 1, 0);
-      }
+        // up ベクトルを設定（Z軸が上）
+        if (axis === 'x') {
+          camera.up.set(0, 0, 1);
+        } else if (axis === 'y') {
+          camera.up.set(0, 0, 1);
+        } else {
+          // Z軸視点の場合、Y軸を上に
+          camera.up.set(0, 1, 0);
+        }
 
-      // targetを見る
-      camera.lookAt(target);
-      camera.updateProjectionMatrix();
+        // targetを見る
+        camera.lookAt(target);
+        camera.updateProjectionMatrix();
 
-      // TrackballControlsを更新
-      controlsRef.current.update();
-    }, []);
+        // TrackballControlsを更新し、慣性を停止
+        controlsRef.current.update();
+        stopControlsInertia();
+      },
+      [stopControlsInertia]
+    );
 
     // 軸周りに90度回転する関数
-    const rotateAroundAxis = useCallback((axis: 'x' | 'y' | 'z') => {
-      if (!controlsRef.current) return;
+    const rotateAroundAxis = useCallback(
+      (axis: 'x' | 'y' | 'z') => {
+        if (!controlsRef.current) return;
 
-      const camera = controlsRef.current.object;
-      const currentPos = camera.position.clone();
-      const currentUp = camera.up.clone();
+        const camera = controlsRef.current.object;
+        const currentPos = camera.position.clone();
+        const currentUp = camera.up.clone();
 
-      // 回転軸ベクトル（右手系で正の方向）
-      const rotationAxis = new THREE.Vector3(
-        axis === 'x' ? 1 : 0,
-        axis === 'y' ? 1 : 0,
-        axis === 'z' ? 1 : 0
-      );
+        // 回転軸ベクトル（右手系で正の方向）
+        const rotationAxis = new THREE.Vector3(
+          axis === 'x' ? 1 : 0,
+          axis === 'y' ? 1 : 0,
+          axis === 'z' ? 1 : 0
+        );
 
-      // 90度（π/2ラジアン）回転
-      const angle = Math.PI / 2;
+        // 90度（π/2ラジアン）回転
+        const angle = Math.PI / 2;
 
-      // カメラ位置を回転
-      currentPos.applyAxisAngle(rotationAxis, angle);
-      camera.position.copy(currentPos);
+        // カメラ位置を回転
+        currentPos.applyAxisAngle(rotationAxis, angle);
+        camera.position.copy(currentPos);
 
-      // upベクトルも回転
-      currentUp.applyAxisAngle(rotationAxis, angle);
-      camera.up.copy(currentUp);
+        // upベクトルも回転
+        currentUp.applyAxisAngle(rotationAxis, angle);
+        camera.up.copy(currentUp);
 
-      // 原点を見る
-      camera.lookAt(0, 0, 0);
-      camera.updateProjectionMatrix();
+        // 原点を見る
+        camera.lookAt(0, 0, 0);
+        camera.updateProjectionMatrix();
 
-      // TrackballControlsを更新
-      controlsRef.current.target.set(0, 0, 0);
-      controlsRef.current.update();
-    }, []);
+        // TrackballControlsを更新し、慣性を停止
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.update();
+        stopControlsInertia();
+      },
+      [stopControlsInertia]
+    );
 
     // 数値バッファをクリアする関数
     const clearNumericBuffer = useCallback(() => {
@@ -2004,6 +2053,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           clearNumericBuffer();
           if (controlsRef.current) {
             controlsRef.current.reset();
+            stopControlsInertia();
           }
           return;
         }
@@ -2240,7 +2290,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               controlWidth: '160px',
             },
           }}
-          oneLineLabels
           hideCopyButton
         />
 
@@ -2271,7 +2320,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
                   controlWidth: '160px',
                 },
               }}
-              oneLineLabels
               hideCopyButton
               titleBar={{ title: 'Clipping Controls' }}
             />
