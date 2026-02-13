@@ -13,6 +13,7 @@ export const VoxelViewer: React.FC = () => {
     settings,
     error,
     isLoading,
+    isActive,
     loadFile,
     loadFileFromPath,
     openAsText,
@@ -300,6 +301,7 @@ export const VoxelViewer: React.FC = () => {
           ref={rendererRef}
           voxelData={voxelData}
           settings={settings}
+          isVisible={isActive}
           onSaveColorSettings={saveColorSettings}
           onOpenSettings={openSettings}
         />

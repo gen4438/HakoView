@@ -81,6 +81,7 @@ declare module 'react' {
 interface VoxelRendererProps {
   voxelData: VoxelDataMessage;
   settings: ViewerSettings | null;
+  isVisible?: boolean;
   onSaveColorSettings?: (colormap: Record<string, string>) => void;
   onOpenSettings?: () => void;
 }
@@ -115,7 +116,7 @@ function CameraStateManager({
   canvasHeight: number;
   orthoInitialZoomRef: React.MutableRefObject<number>;
 }) {
-  const { camera } = useThree();
+  const { camera, invalidate } = useThree();
   const previousCameraTypeRef = useRef<boolean | null>(null);
   const [isRestoringCamera, setIsRestoringCamera] = useState(false);
   const restoringFrameCountRef = useRef(0);
@@ -155,6 +156,9 @@ function CameraStateManager({
         setIsRestoringCamera(false);
         restoringFrameCountRef.current = 0;
         convertedStateRef.current = null;
+      } else {
+        // frameloop="demand"のため、次フレームの描画を明示的に要求
+        invalidate();
       }
       return;
     }
@@ -968,8 +972,28 @@ function VoxelMesh(props: VoxelMeshProps) {
   );
 }
 
+/**
+ * タブの表示状態に応じて描画を制御する。
+ * frameloop="never"→"demand"に切り替わった直後に1フレーム描画をトリガーし、
+ * 画面が最新の状態で表示されるようにする。
+ */
+function VisibilityManager({ isVisible }: { isVisible: boolean }) {
+  const invalidate = useThree((s) => s.invalidate);
+  const prevRef = useRef(isVisible);
+
+  useEffect(() => {
+    if (isVisible && !prevRef.current) {
+      // タブが表示状態に復帰 → 最初の描画をトリガー
+      invalidate();
+    }
+    prevRef.current = isVisible;
+  }, [isVisible, invalidate]);
+
+  return null;
+}
+
 export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
-  ({ voxelData, settings, onSaveColorSettings, onOpenSettings }, ref) => {
+  ({ voxelData, settings, isVisible = true, onSaveColorSettings, onOpenSettings }, ref) => {
     // TrackballControlsのrefを作成
     const controlsRef = useRef<any>(null);
 
@@ -2378,7 +2402,9 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
           dpr={effectiveDpr}
           style={{ width: '100%', height: '100%', background: 'transparent' }}
+          frameloop={isVisible ? 'demand' : 'never'}
         >
+          <VisibilityManager isVisible={isVisible} />
           {usePerspective ? (
             <PerspectiveCamera
               makeDefault
