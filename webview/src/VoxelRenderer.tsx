@@ -46,6 +46,10 @@ const VoxelShaderMaterial = shaderMaterial(
     uSliceDistance2: 0.0,
     uIsOrthographic: 0.0,
     uCameraDistance: 0.0,
+    uOccupancyTexture: null,
+    uOccupancyDimensions: new THREE.Vector3(1, 1, 1),
+    uBlockSize: 8.0,
+    uUseOccupancy: 0.0,
     uEnableEdgeHighlight: 1.0,
     uEdgeThickness: 0.03,
     uEdgeColor: new THREE.Color('#ffffff'),
@@ -500,6 +504,7 @@ interface VoxelMeshProps {
   edgeFadeEnd: number;
   valueVisibility: boolean[];
   customColors: string[];
+  useOccupancy: boolean;
 }
 
 function VoxelMesh(props: VoxelMeshProps) {
@@ -519,6 +524,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     edgeFadeEnd,
     valueVisibility,
     customColors,
+    useOccupancy,
   } = props;
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -572,6 +578,61 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [customColors, valueVisibility]);
 
+  // Occupancy Grid テクスチャ（動的ブロックサイズの占有情報）
+  // ブロックサイズはグリッドの最大次元に応じてスケーリング:
+  //   Occupancy Grid が各軸 ~32 ブロックになるよう調整（2のべき乗、最小8・最大64）
+  //   大きなグリッドでは大きなブロックで空領域を効率的にスキップ
+  const occupancyData = useMemo(() => {
+    const { dimensions, values } = voxelData;
+    const maxDim = Math.max(dimensions.x, dimensions.y, dimensions.z);
+    const blockSize = Math.max(
+      8,
+      Math.min(64, Math.pow(2, Math.ceil(Math.log2(Math.max(1, maxDim / 32)))))
+    );
+    const occX = Math.ceil(dimensions.x / blockSize);
+    const occY = Math.ceil(dimensions.y / blockSize);
+    const occZ = Math.ceil(dimensions.z / blockSize);
+    const occData = new Uint8Array(occX * occY * occZ);
+    const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
+
+    for (let bx = 0; bx < occX; bx++) {
+      const xStart = bx * blockSize;
+      const xEnd = Math.min(xStart + blockSize, dimensions.x);
+      for (let by = 0; by < occY; by++) {
+        const yStart = by * blockSize;
+        const yEnd = Math.min(yStart + blockSize, dimensions.y);
+        for (let bz = 0; bz < occZ; bz++) {
+          const zStart = bz * blockSize;
+          const zEnd = Math.min(zStart + blockSize, dimensions.z);
+          let occupied = false;
+          for (let x = xStart; x < xEnd && !occupied; x++) {
+            for (let y = yStart; y < yEnd && !occupied; y++) {
+              for (let z = zStart; z < zEnd; z++) {
+                // LesParser と同じインデックス計算式: x + X * (y + Y * z)
+                const index = x + dimensions.x * (y + dimensions.y * z);
+                if (uint8Array[index] !== 0) {
+                  occupied = true;
+                  break;
+                }
+              }
+            }
+          }
+          occData[bx + occX * (by + occY * bz)] = occupied ? 255 : 0;
+        }
+      }
+    }
+
+    const texture = new THREE.Data3DTexture(occData, occX, occY, occZ);
+    texture.format = THREE.RedFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.unpackAlignment = 1;
+    texture.needsUpdate = true;
+
+    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ), blockSize };
+  }, [voxelData]);
+
   // テクスチャの破棄（GPUメモリリーク防止）
   useEffect(() => {
     return () => {
@@ -585,6 +646,12 @@ function VoxelMesh(props: VoxelMeshProps) {
     };
   }, [paletteTexture]);
 
+  useEffect(() => {
+    return () => {
+      occupancyData.texture.dispose();
+    };
+  }, [occupancyData]);
+
   // 初期化: voxelDataとテクスチャをuniformsに設定
   useEffect(() => {
     if (!materialRef.current) return;
@@ -595,7 +662,10 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uTexture.value = dataTexture;
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-  }, [voxelData, dataTexture, paletteTexture]);
+    u.uOccupancyTexture.value = occupancyData.texture;
+    u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
+    u.uBlockSize.value = occupancyData.blockSize;
+  }, [voxelData, dataTexture, paletteTexture, occupancyData]);
 
   // Levaコントロールの値が変更されたときにuniformsを直接更新
   useEffect(() => {
@@ -635,6 +705,9 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uEdgeFadeStart.value = edgeFadeStart;
     u.uEdgeFadeEnd.value = edgeFadeEnd;
 
+    // Occupancy Grid
+    u.uUseOccupancy.value = useOccupancy ? 1.0 : 0.0;
+
     // ボクセル値表示制御
     u.uValueVisibility.value = valueVisibility.map((v) => (v ? 1.0 : 0.0));
 
@@ -654,6 +727,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     edgeFadeStart,
     edgeFadeEnd,
     valueVisibility,
+    useOccupancy,
     paletteTexture,
   ]);
 
@@ -722,6 +796,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
     // 現在操作対象のスライス（1 or 2）
     const [activeSlice, setActiveSlice] = useState<1 | 2>(1);
+
+    // スライス平面の可視化状態（両方のスライスを表示）
+    const [showSlicePlanes, setShowSlicePlanes] = useState<boolean>(false);
+    const slicePlaneTimeoutRef = useRef<number | null>(null);
 
     // 最後に押されたキーを記録（"gg"の実装用）
     const lastKeyRef = useRef<string>('');
@@ -935,6 +1013,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       () => ({
         Reset: button(() => resetAllSettings()),
         usePerspective: { value: true, label: 'Perspective' },
+        useOccupancy: { value: true, label: 'Occupancy Grid' },
         edgeHighlight: folder(
           {
             enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
@@ -1068,6 +1147,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
     const {
       usePerspective,
+      useOccupancy,
       fov,
       far,
       alpha,
@@ -1121,6 +1201,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         showScaleBar: defaultValues.current.showScaleBar,
         showBoundingBox: defaultValues.current.showBoundingBox,
         showGrid: defaultValues.current.showGrid,
+        useOccupancy: true,
         ...voxelResetValues,
       });
 
@@ -1242,6 +1323,54 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       }
     }, []);
 
+    // スライス平面を2秒間表示する関数（両方のスライス）
+    const showSlicePlanesTemporarily = useCallback(() => {
+      setShowSlicePlanes(true);
+      if (slicePlaneTimeoutRef.current !== null) {
+        window.clearTimeout(slicePlaneTimeoutRef.current);
+      }
+      slicePlaneTimeoutRef.current = window.setTimeout(() => {
+        setShowSlicePlanes(false);
+      }, 2000);
+    }, []);
+
+    // モデルを画面にフィットさせる関数
+    const fitModelToView = useCallback(() => {
+      if (!controlsRef.current) return;
+
+      const camera = controlsRef.current.object;
+      const target = controlsRef.current.target;
+      const { x, y, z } = voxelData.dimensions;
+
+      // モデルのバウンディングスフィアの半径
+      const radius = Math.sqrt(x * x + y * y + z * z) / 2;
+
+      // カメラからターゲットへの方向ベクトルを正規化
+      const direction = new THREE.Vector3().subVectors(camera.position, target).normalize();
+
+      if ((camera as any).isOrthographicCamera) {
+        // Orthographicカメラの場合: zoomを調整
+        const orthoCamera = camera as THREE.OrthographicCamera;
+        // モデルが画面に収まるzoomを計算（少し余白を持たせる）
+        const zoom = Math.min(width, height) / (radius * 2.8);
+        orthoCamera.zoom = Math.max(0.1, zoom);
+        orthoCamera.updateProjectionMatrix();
+      } else {
+        // Perspectiveカメラの場合: カメラの距離を調整
+        const perspCamera = camera as THREE.PerspectiveCamera;
+        const fovRad = (perspCamera.fov * Math.PI) / 180;
+        // モデルがビューに収まる距離を計算（少し余白を持たせる）
+        const distance = (radius / Math.tan(fovRad / 2)) * 1.2;
+
+        // 現在の向きを維持したまま距離だけ調整
+        const newPosition = new THREE.Vector3().copy(target).addScaledVector(direction, distance);
+        camera.position.copy(newPosition);
+      }
+
+      camera.updateProjectionMatrix();
+      controlsRef.current.update();
+    }, [voxelData.dimensions, width, height]);
+
     // 数値バッファのタイムアウト設定（2秒後に自動クリア）
     const resetNumericBufferTimeout = useCallback(() => {
       if (numericBufferTimeoutRef.current !== null) {
@@ -1252,12 +1381,27 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       }, 2000);
     }, [clearNumericBuffer]);
 
+    // スライス位置が変更されたら、両方の平面を表示
+    useEffect(() => {
+      if (clippingMode === 'Slice') {
+        showSlicePlanesTemporarily();
+      }
+    }, [slicePosition1, slicePosition2, clippingMode, showSlicePlanesTemporarily]);
+
     // キーボードショートカット
     useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
 
         const key = event.key;
+
+        // Spaceキーでモデルをフィット
+        if (key === ' ') {
+          event.preventDefault();
+          clearNumericBuffer();
+          fitModelToView();
+          return;
+        }
 
         // ESCキーで数値バッファをクリア
         if (key === 'Escape') {
@@ -1586,6 +1730,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       clearNumericBuffer,
       resetNumericBufferTimeout,
       resetAllSettings,
+      fitModelToView,
     ]);
 
     // クリッピングプレーン計算
@@ -1881,6 +2026,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             edgeFadeEnd={edgeMaxDistance}
             valueVisibility={valueVisibility}
             customColors={customColors}
+            useOccupancy={useOccupancy}
           />
 
           {showBoundingBox && (
@@ -1908,6 +2054,91 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               position={[0, 0, Number((-voxelData.dimensions.z / 2) * 1.1)]}
               rotation={[Math.PI / 2, 0, 0]}
             />
+          )}
+
+          {/* スライス平面の可視化（両方のスライス） */}
+          {showSlicePlanes && clippingMode === 'Slice' && (
+            <>
+              {/* Slice 1 (Pos) の平面 */}
+              {(() => {
+                const { x, y, z } = voxelData.dimensions;
+                let position: [number, number, number] = [0, 0, 0];
+                let rotation: [number, number, number] = [0, 0, 0];
+                let planeSize: [number, number] = [1, 1];
+
+                switch (sliceAxis) {
+                  case 'X':
+                    position = [slicePosition1 - x / 2, 0, 0];
+                    rotation = [0, Math.PI / 2, 0];
+                    planeSize = [y, z];
+                    break;
+                  case 'Y':
+                    position = [0, slicePosition1 - y / 2, 0];
+                    rotation = [Math.PI / 2, 0, 0];
+                    planeSize = [x, z];
+                    break;
+                  case 'Z':
+                    position = [0, 0, slicePosition1 - z / 2];
+                    rotation = [0, 0, 0];
+                    planeSize = [x, y];
+                    break;
+                }
+
+                return (
+                  <mesh position={position} rotation={rotation} renderOrder={999}>
+                    <planeGeometry args={planeSize} />
+                    <meshBasicMaterial
+                      color="#00aaff"
+                      transparent
+                      opacity={0.3}
+                      side={THREE.DoubleSide}
+                      depthWrite={false}
+                      depthTest={false}
+                    />
+                  </mesh>
+                );
+              })()}
+
+              {/* Slice 2 (Neg) の平面 */}
+              {(() => {
+                const { x, y, z } = voxelData.dimensions;
+                let position: [number, number, number] = [0, 0, 0];
+                let rotation: [number, number, number] = [0, 0, 0];
+                let planeSize: [number, number] = [1, 1];
+
+                switch (sliceAxis) {
+                  case 'X':
+                    position = [slicePosition2 - x / 2, 0, 0];
+                    rotation = [0, Math.PI / 2, 0];
+                    planeSize = [y, z];
+                    break;
+                  case 'Y':
+                    position = [0, slicePosition2 - y / 2, 0];
+                    rotation = [Math.PI / 2, 0, 0];
+                    planeSize = [x, z];
+                    break;
+                  case 'Z':
+                    position = [0, 0, slicePosition2 - z / 2];
+                    rotation = [0, 0, 0];
+                    planeSize = [x, y];
+                    break;
+                }
+
+                return (
+                  <mesh position={position} rotation={rotation} renderOrder={999}>
+                    <planeGeometry args={planeSize} />
+                    <meshBasicMaterial
+                      color="#ff9900"
+                      transparent
+                      opacity={0.3}
+                      side={THREE.DoubleSide}
+                      depthWrite={false}
+                      depthTest={false}
+                    />
+                  </mesh>
+                );
+              })()}
+            </>
           )}
 
           <Stats />
