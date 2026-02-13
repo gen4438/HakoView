@@ -282,18 +282,16 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         return vec4(finalColor, voxel.a);
     }
 
-    // ステップ数制御
-    float near = 50.0, far = 500.0;
-    float distanceFactor = smoothstep(near, far, uCameraDistance);
-    int baseMaxSteps = int(min(length(uVoxelShape) * 2.0, 800.0));
-    int maxSteps = int(mix(float(baseMaxSteps), float(baseMaxSteps) * 0.25, distanceFactor));
+    // ステップ数制御 — グリッド全体を走査できるステップ数を確保
+    // DDA走査の最大ステップ数はグリッド次元の合計（各軸で最大N回境界を横切る）
+    int maxSteps = int(uVoxelShape.x + uVoxelShape.y + uVoxelShape.z);
 
     bool  hit = false;
     vec3  hitNormal = vec3(0.0);
     float hitDistance = 0.0;
     vec4  voxel = vec4(0.0);
 
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 4096; ++i) {
         if (i >= maxSteps) break;
 
         // 最小のtMax軸を決定
