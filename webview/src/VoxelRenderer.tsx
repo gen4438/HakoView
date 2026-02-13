@@ -1756,6 +1756,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           if (clippingMode === 'Slice' && lastKeyRef.current === 's') {
             const axisMap = { x: 'X' as const, y: 'Y' as const, z: 'Z' as const };
             setClipping({ sliceAxis: axisMap[key] });
+            showSlicePlanesTemporarily(); // 軸切り替え時にスライス平面を一時表示
             lastKeyRef.current = '';
             if (lastKeyTimeoutRef.current !== null) {
               window.clearTimeout(lastKeyTimeoutRef.current);
@@ -1971,10 +1972,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             return;
           }
 
-          // "=": 両方をリセット
+          // "=": 現在の軸のスライス位置を初期配置にリセット（min=0, max=軸の最大値）
           if (key === '=') {
             clearNumericBuffer();
-            setSlicePosition(Math.floor(maxRange / 2), 0);
+            setSlicePosition(maxRange, 0);
             return;
           }
 
@@ -2083,6 +2084,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       resetNumericBufferTimeout,
       resetAllSettings,
       fitModelToView,
+      showSlicePlanesTemporarily,
     ]);
 
     // クリッピングプレーン計算
