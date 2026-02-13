@@ -797,6 +797,10 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // 現在操作対象のスライス（1 or 2）
     const [activeSlice, setActiveSlice] = useState<1 | 2>(1);
 
+    // スライス平面の可視化状態（両方のスライスを表示）
+    const [showSlicePlanes, setShowSlicePlanes] = useState<boolean>(false);
+    const slicePlaneTimeoutRef = useRef<number | null>(null);
+
     // 最後に押されたキーを記録（"gg"の実装用）
     const lastKeyRef = useRef<string>('');
     const lastKeyTimeoutRef = useRef<number | null>(null);
@@ -1319,6 +1323,54 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       }
     }, []);
 
+    // スライス平面を2秒間表示する関数（両方のスライス）
+    const showSlicePlanesTemporarily = useCallback(() => {
+      setShowSlicePlanes(true);
+      if (slicePlaneTimeoutRef.current !== null) {
+        window.clearTimeout(slicePlaneTimeoutRef.current);
+      }
+      slicePlaneTimeoutRef.current = window.setTimeout(() => {
+        setShowSlicePlanes(false);
+      }, 2000);
+    }, []);
+
+    // モデルを画面にフィットさせる関数
+    const fitModelToView = useCallback(() => {
+      if (!controlsRef.current) return;
+
+      const camera = controlsRef.current.object;
+      const target = controlsRef.current.target;
+      const { x, y, z } = voxelData.dimensions;
+
+      // モデルのバウンディングスフィアの半径
+      const radius = Math.sqrt(x * x + y * y + z * z) / 2;
+
+      // カメラからターゲットへの方向ベクトルを正規化
+      const direction = new THREE.Vector3().subVectors(camera.position, target).normalize();
+
+      if ((camera as any).isOrthographicCamera) {
+        // Orthographicカメラの場合: zoomを調整
+        const orthoCamera = camera as THREE.OrthographicCamera;
+        // モデルが画面に収まるzoomを計算（少し余白を持たせる）
+        const zoom = Math.min(width, height) / (radius * 2.8);
+        orthoCamera.zoom = Math.max(0.1, zoom);
+        orthoCamera.updateProjectionMatrix();
+      } else {
+        // Perspectiveカメラの場合: カメラの距離を調整
+        const perspCamera = camera as THREE.PerspectiveCamera;
+        const fovRad = (perspCamera.fov * Math.PI) / 180;
+        // モデルがビューに収まる距離を計算（少し余白を持たせる）
+        const distance = (radius / Math.tan(fovRad / 2)) * 1.2;
+
+        // 現在の向きを維持したまま距離だけ調整
+        const newPosition = new THREE.Vector3().copy(target).addScaledVector(direction, distance);
+        camera.position.copy(newPosition);
+      }
+
+      camera.updateProjectionMatrix();
+      controlsRef.current.update();
+    }, [voxelData.dimensions, width, height]);
+
     // 数値バッファのタイムアウト設定（2秒後に自動クリア）
     const resetNumericBufferTimeout = useCallback(() => {
       if (numericBufferTimeoutRef.current !== null) {
@@ -1329,12 +1381,27 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       }, 2000);
     }, [clearNumericBuffer]);
 
+    // スライス位置が変更されたら、両方の平面を表示
+    useEffect(() => {
+      if (clippingMode === 'Slice') {
+        showSlicePlanesTemporarily();
+      }
+    }, [slicePosition1, slicePosition2, clippingMode, showSlicePlanesTemporarily]);
+
     // キーボードショートカット
     useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
         // 入力フォームなどでの入力中は無視したいが、今回はLeva以外に入力要素はないので簡易的に実装
 
         const key = event.key;
+
+        // Spaceキーでモデルをフィット
+        if (key === ' ') {
+          event.preventDefault();
+          clearNumericBuffer();
+          fitModelToView();
+          return;
+        }
 
         // ESCキーで数値バッファをクリア
         if (key === 'Escape') {
@@ -1663,6 +1730,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       clearNumericBuffer,
       resetNumericBufferTimeout,
       resetAllSettings,
+      fitModelToView,
     ]);
 
     // クリッピングプレーン計算
@@ -1986,6 +2054,91 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               position={[0, 0, Number((-voxelData.dimensions.z / 2) * 1.1)]}
               rotation={[Math.PI / 2, 0, 0]}
             />
+          )}
+
+          {/* スライス平面の可視化（両方のスライス） */}
+          {showSlicePlanes && clippingMode === 'Slice' && (
+            <>
+              {/* Slice 1 (Pos) の平面 */}
+              {(() => {
+                const { x, y, z } = voxelData.dimensions;
+                let position: [number, number, number] = [0, 0, 0];
+                let rotation: [number, number, number] = [0, 0, 0];
+                let planeSize: [number, number] = [1, 1];
+
+                switch (sliceAxis) {
+                  case 'X':
+                    position = [slicePosition1 - x / 2, 0, 0];
+                    rotation = [0, Math.PI / 2, 0];
+                    planeSize = [y, z];
+                    break;
+                  case 'Y':
+                    position = [0, slicePosition1 - y / 2, 0];
+                    rotation = [Math.PI / 2, 0, 0];
+                    planeSize = [x, z];
+                    break;
+                  case 'Z':
+                    position = [0, 0, slicePosition1 - z / 2];
+                    rotation = [0, 0, 0];
+                    planeSize = [x, y];
+                    break;
+                }
+
+                return (
+                  <mesh position={position} rotation={rotation} renderOrder={999}>
+                    <planeGeometry args={planeSize} />
+                    <meshBasicMaterial
+                      color="#00aaff"
+                      transparent
+                      opacity={0.3}
+                      side={THREE.DoubleSide}
+                      depthWrite={false}
+                      depthTest={false}
+                    />
+                  </mesh>
+                );
+              })()}
+
+              {/* Slice 2 (Neg) の平面 */}
+              {(() => {
+                const { x, y, z } = voxelData.dimensions;
+                let position: [number, number, number] = [0, 0, 0];
+                let rotation: [number, number, number] = [0, 0, 0];
+                let planeSize: [number, number] = [1, 1];
+
+                switch (sliceAxis) {
+                  case 'X':
+                    position = [slicePosition2 - x / 2, 0, 0];
+                    rotation = [0, Math.PI / 2, 0];
+                    planeSize = [y, z];
+                    break;
+                  case 'Y':
+                    position = [0, slicePosition2 - y / 2, 0];
+                    rotation = [Math.PI / 2, 0, 0];
+                    planeSize = [x, z];
+                    break;
+                  case 'Z':
+                    position = [0, 0, slicePosition2 - z / 2];
+                    rotation = [0, 0, 0];
+                    planeSize = [x, y];
+                    break;
+                }
+
+                return (
+                  <mesh position={position} rotation={rotation} renderOrder={999}>
+                    <planeGeometry args={planeSize} />
+                    <meshBasicMaterial
+                      color="#ff9900"
+                      transparent
+                      opacity={0.3}
+                      side={THREE.DoubleSide}
+                      depthWrite={false}
+                      depthTest={false}
+                    />
+                  </mesh>
+                );
+              })()}
+            </>
           )}
 
           <Stats />
