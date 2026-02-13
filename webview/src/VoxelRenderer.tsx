@@ -578,10 +578,17 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [customColors, valueVisibility]);
 
-  // Occupancy Grid テクスチャ（8×8×8ブロック単位の占有情報）
+  // Occupancy Grid テクスチャ（動的ブロックサイズの占有情報）
+  // ブロックサイズはグリッドの最大次元に応じてスケーリング:
+  //   Occupancy Grid が各軸 ~32 ブロックになるよう調整（2のべき乗、最小8・最大64）
+  //   大きなグリッドでは大きなブロックで空領域を効率的にスキップ
   const occupancyData = useMemo(() => {
     const { dimensions, values } = voxelData;
-    const blockSize = 8;
+    const maxDim = Math.max(dimensions.x, dimensions.y, dimensions.z);
+    const blockSize = Math.max(
+      8,
+      Math.min(64, Math.pow(2, Math.ceil(Math.log2(Math.max(1, maxDim / 32)))))
+    );
     const occX = Math.ceil(dimensions.x / blockSize);
     const occY = Math.ceil(dimensions.y / blockSize);
     const occZ = Math.ceil(dimensions.z / blockSize);
@@ -623,7 +630,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     texture.unpackAlignment = 1;
     texture.needsUpdate = true;
 
-    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ) };
+    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ), blockSize };
   }, [voxelData]);
 
   // テクスチャの破棄（GPUメモリリーク防止）
@@ -657,7 +664,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uPaletteSize.value = 16;
     u.uOccupancyTexture.value = occupancyData.texture;
     u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
-    u.uBlockSize.value = 8.0;
+    u.uBlockSize.value = occupancyData.blockSize;
   }, [voxelData, dataTexture, paletteTexture, occupancyData]);
 
   // Levaコントロールの値が変更されたときにuniformsを直接更新
