@@ -171,7 +171,8 @@ export const VoxelViewer: React.FC = () => {
       const uriList = event.dataTransfer.getData('text/uri-list');
       if (uriList) {
         const uri = uriList.split('\n')[0].trim();
-        if (uri && uri.toLowerCase().endsWith('.les')) {
+        const lowerUri = uri.toLowerCase();
+        if (uri && (lowerUri.endsWith('.les') || lowerUri.endsWith('.les.gz'))) {
           loadFileFromPath(uri);
           return;
         }
@@ -183,8 +184,9 @@ export const VoxelViewer: React.FC = () => {
         return;
       }
 
-      if (!file.name.toLowerCase().endsWith('.les')) {
-        reportError('Please drop a .leS file.');
+      const lowerName = file.name.toLowerCase();
+      if (!lowerName.endsWith('.les') && !lowerName.endsWith('.les.gz')) {
+        reportError('Please drop a .leS or .leS.gz file.');
         return;
       }
 

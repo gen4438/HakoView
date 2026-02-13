@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as zlib from 'zlib';
 import { getWebviewHtml } from '../voxelEditor/getWebviewHtml';
 import { LesParser } from '../voxelParser/LesParser';
 import type { VoxelDataset } from '../voxelParser/VoxelData';
@@ -63,7 +64,13 @@ export function registerOpenVoxelViewerCommand(
 
         case 'loadFile':
           try {
-            const data = new Uint8Array(message.data);
+            let data = new Uint8Array(message.data);
+
+            // gzip圧縮されているか確認
+            if (message.fileName.toLowerCase().endsWith('.gz')) {
+              data = zlib.gunzipSync(data);
+            }
+
             currentDataset = LesParser.parse(data, message.fileName);
             currentError = null;
             sendVoxelData(panel.webview, currentDataset, true);
@@ -84,8 +91,14 @@ export function registerOpenVoxelViewerCommand(
             } catch {
               uri = vscode.Uri.file(message.filePath);
             }
-            const fileData = await vscode.workspace.fs.readFile(uri);
+            let fileData = await vscode.workspace.fs.readFile(uri);
             const fileName = uri.path.split('/').pop() || 'unknown.leS';
+
+            // gzip圧縮されているか確認
+            if (fileName.toLowerCase().endsWith('.gz')) {
+              fileData = zlib.gunzipSync(fileData);
+            }
+
             currentDataset = LesParser.parse(fileData, fileName);
             currentError = null;
             sendVoxelData(panel.webview, currentDataset, true);
