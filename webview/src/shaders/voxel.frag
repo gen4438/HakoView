@@ -12,9 +12,13 @@ uniform float uAmbientIntensity; // アンビエント光の強度
 uniform vec4 uClippingPlane; // クリッピングプレーン (normal.xyz, distance) - Custom mode用
 uniform float uEnableClipping; // クリッピング有効フラグ
 uniform float uClippingMode; // 0=off, 1=slice, 2=custom
-uniform float uSliceAxis; // 0=X, 1=Y, 2=Z
-uniform float uSliceDistance1; // Slice 1の距離
-uniform float uSliceDistance2; // Slice 2の距離
+uniform float uSliceAxis; // 0=X, 1=Y, 2=Z (操作対象の軸、描画には影響しない)
+uniform float uSliceXMin; // X軸のmin側クリッピング距離
+uniform float uSliceXMax; // X軸のmax側クリッピング距離
+uniform float uSliceYMin; // Y軸のmin側クリッピング距離
+uniform float uSliceYMax; // Y軸のmax側クリッピング距離
+uniform float uSliceZMin; // Z軸のmin側クリッピング距離
+uniform float uSliceZMax; // Z軸のmax側クリッピング距離
 uniform float uCameraDistance; // カメラからの距離
 uniform float uEnableEdgeHighlight; // エッジ強調有効フラグ
 uniform float uEdgeThickness; // エッジの太さ
@@ -116,72 +120,122 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         if (uClippingMode < 0.5) {
             // Mode 0: Off (何もしない)
         } else if (uClippingMode < 1.5) {
-            // Mode 1: Slice (2面スライス)
-            // スライス1は常にpos側（正方向）をカット: coord > distance1 を非表示
-            // スライス2は常にneg側（負方向）をカット: coord < distance2 を非表示
-            // 通常（distance1 >= distance2）: distance2 <= coord <= distance1 の範囲を表示
-            // 逆転（distance1 < distance2）: distance1 < coord < distance2 のみを非表示（それ以外を表示）
+            // Mode 1: Slice (全軸同時クリッピング)
+            // 各軸について min/max の範囲をクリッピング
+            // 通常モード (min <= max): min <= coord <= max の範囲を表示
+            // 逆転モード (min > max): max < coord < min の範囲を非表示（それ以外を表示）
 
-            bool normalMode = (uSliceDistance1 >= uSliceDistance2);
+            float origTEnter = tEnter;
 
-            // レイ方向と原点のスライス軸成分を取得
-            float dirCoord = (int(uSliceAxis) == 0) ? directionWS.x :
-                             (int(uSliceAxis) == 1) ? directionWS.y : directionWS.z;
-            float originCoord = (int(uSliceAxis) == 0) ? originWS.x :
-                                (int(uSliceAxis) == 1) ? originWS.y : originWS.z;
+            // X軸のクリッピング
+            bool normalModeX = (uSliceXMin <= uSliceXMax);
+            if (abs(directionWS.x) > 1e-6) {
+                float tXMin = (uSliceXMin - originWS.x) / directionWS.x;
+                float tXMax = (uSliceXMax - originWS.x) / directionWS.x;
 
-            if (abs(dirCoord) > 1e-6) {
-                // t値ベースのクリッピング: 座標比較ではなくt値で直接クランプすることで
-                // スライス面がAABB面と一致する境界ケースでの浮動小数点精度問題を回避
-                float t1 = (uSliceDistance1 - originCoord) / dirCoord;
-                float t2 = (uSliceDistance2 - originCoord) / dirCoord;
-                float origTEnter = tEnter;
-
-                if (normalMode) {
-                    // 通常モード: distance2 <= coord <= distance1 の範囲を表示
-                    // 表示範囲のt区間（レイ方向に依存せずmin/maxで正しい順序になる）
-                    float tSliceEnter = min(t1, t2);
-                    float tSliceExit = max(t1, t2);
-
-                    tEnter = max(tEnter, tSliceEnter);
-                    tExit = min(tExit, tSliceExit);
+                if (normalModeX) {
+                    tEnter = max(tEnter, min(tXMin, tXMax));
+                    tExit = min(tExit, max(tXMin, tXMax));
                 } else {
-                    // 逆転モード: distance1 < coord < distance2 のみを非表示
-                    // 非表示範囲のt区間
-                    float tHiddenStart = min(t1, t2);
-                    float tHiddenEnd = max(t1, t2);
-
+                    float tHiddenStart = min(tXMin, tXMax);
+                    float tHiddenEnd = max(tXMin, tXMax);
                     float currentStart = max(tEnter, 0.0);
-
                     if (currentStart >= tHiddenEnd) {
-                        // 非表示ゾーン後から開始 → クリッピング不要
+                        // OK
                     } else if (currentStart >= tHiddenStart) {
-                        // 非表示ゾーン内から開始 → ゾーン終端へスキップ
                         tEnter = max(tEnter, tHiddenEnd);
                     } else {
-                        // 非表示ゾーン前から開始 → ゾーン開始でクリップ
                         tExit = min(tExit, tHiddenStart);
                     }
                 }
-
-                if (tExit <= max(tEnter, 0.0)) discard;
-
-                clippedAtEnter = (tEnter > origTEnter + 1e-5);
             } else {
-                // dirCoordがほぼ0の場合（レイがスライス軸に平行）
                 vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
-                float startCoord = (int(uSliceAxis) == 0) ? rayStart.x :
-                                   (int(uSliceAxis) == 1) ? rayStart.y : rayStart.z;
-                if (normalMode) {
-                    if (startCoord < uSliceDistance2 || startCoord > uSliceDistance1) {
+                if (normalModeX) {
+                    if (rayStart.x < min(uSliceXMin, uSliceXMax) || rayStart.x > max(uSliceXMin, uSliceXMax)) {
                         discard;
                     }
                 } else {
-                    if (startCoord > uSliceDistance1 && startCoord < uSliceDistance2) {
+                    if (rayStart.x > min(uSliceXMin, uSliceXMax) && rayStart.x < max(uSliceXMin, uSliceXMax)) {
                         discard;
                     }
                 }
             }
+
+            if (tExit <= max(tEnter, 0.0)) discard;
+
+            // Y軸のクリッピング
+            bool normalModeY = (uSliceYMin <= uSliceYMax);
+            if (abs(directionWS.y) > 1e-6) {
+                float tYMin = (uSliceYMin - originWS.y) / directionWS.y;
+                float tYMax = (uSliceYMax - originWS.y) / directionWS.y;
+
+                if (normalModeY) {
+                    tEnter = max(tEnter, min(tYMin, tYMax));
+                    tExit = min(tExit, max(tYMin, tYMax));
+                } else {
+                    float tHiddenStart = min(tYMin, tYMax);
+                    float tHiddenEnd = max(tYMin, tYMax);
+                    float currentStart = max(tEnter, 0.0);
+                    if (currentStart >= tHiddenEnd) {
+                        // OK
+                    } else if (currentStart >= tHiddenStart) {
+                        tEnter = max(tEnter, tHiddenEnd);
+                    } else {
+                        tExit = min(tExit, tHiddenStart);
+                    }
+                }
+            } else {
+                vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
+                if (normalModeY) {
+                    if (rayStart.y < min(uSliceYMin, uSliceYMax) || rayStart.y > max(uSliceYMin, uSliceYMax)) {
+                        discard;
+                    }
+                } else {
+                    if (rayStart.y > min(uSliceYMin, uSliceYMax) && rayStart.y < max(uSliceYMin, uSliceYMax)) {
+                        discard;
+                    }
+                }
+            }
+
+            if (tExit <= max(tEnter, 0.0)) discard;
+
+            // Z軸のクリッピング
+            bool normalModeZ = (uSliceZMin <= uSliceZMax);
+            if (abs(directionWS.z) > 1e-6) {
+                float tZMin = (uSliceZMin - originWS.z) / directionWS.z;
+                float tZMax = (uSliceZMax - originWS.z) / directionWS.z;
+
+                if (normalModeZ) {
+                    tEnter = max(tEnter, min(tZMin, tZMax));
+                    tExit = min(tExit, max(tZMin, tZMax));
+                } else {
+                    float tHiddenStart = min(tZMin, tZMax);
+                    float tHiddenEnd = max(tZMin, tZMax);
+                    float currentStart = max(tEnter, 0.0);
+                    if (currentStart >= tHiddenEnd) {
+                        // OK
+                    } else if (currentStart >= tHiddenStart) {
+                        tEnter = max(tEnter, tHiddenEnd);
+                    } else {
+                        tExit = min(tExit, tHiddenStart);
+                    }
+                }
+            } else {
+                vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
+                if (normalModeZ) {
+                    if (rayStart.z < min(uSliceZMin, uSliceZMax) || rayStart.z > max(uSliceZMin, uSliceZMax)) {
+                        discard;
+                    }
+                } else {
+                    if (rayStart.z > min(uSliceZMin, uSliceZMax) && rayStart.z < max(uSliceZMin, uSliceZMax)) {
+                        discard;
+                    }
+                }
+            }
+
+            if (tExit <= max(tEnter, 0.0)) discard;
+
+            clippedAtEnter = (tEnter > origTEnter + 1e-5);
         } else {
             // Mode 2: Custom (従来の1面クリッピング)
             vec3 rayStart = originWS + directionWS * max(tEnter, 0.0);
