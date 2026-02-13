@@ -2290,7 +2290,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
               controlWidth: '160px',
             },
           }}
-          oneLineLabels
           hideCopyButton
         />
 
@@ -2321,7 +2320,6 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
                   controlWidth: '160px',
                 },
               }}
-              oneLineLabels
               hideCopyButton
               titleBar={{ title: 'Clipping Controls' }}
             />
