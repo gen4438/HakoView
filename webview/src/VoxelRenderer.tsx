@@ -46,6 +46,10 @@ const VoxelShaderMaterial = shaderMaterial(
     uSliceDistance2: 0.0,
     uIsOrthographic: 0.0,
     uCameraDistance: 0.0,
+    uOccupancyTexture: null,
+    uOccupancyDimensions: new THREE.Vector3(1, 1, 1),
+    uBlockSize: 8.0,
+    uUseOccupancy: 0.0,
     uEnableEdgeHighlight: 1.0,
     uEdgeThickness: 0.03,
     uEdgeColor: new THREE.Color('#ffffff'),
@@ -500,6 +504,7 @@ interface VoxelMeshProps {
   edgeFadeEnd: number;
   valueVisibility: boolean[];
   customColors: string[];
+  useOccupancy: boolean;
 }
 
 function VoxelMesh(props: VoxelMeshProps) {
@@ -519,6 +524,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     edgeFadeEnd,
     valueVisibility,
     customColors,
+    useOccupancy,
   } = props;
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -572,6 +578,54 @@ function VoxelMesh(props: VoxelMeshProps) {
     return texture;
   }, [customColors, valueVisibility]);
 
+  // Occupancy Grid テクスチャ（8×8×8ブロック単位の占有情報）
+  const occupancyData = useMemo(() => {
+    const { dimensions, values } = voxelData;
+    const blockSize = 8;
+    const occX = Math.ceil(dimensions.x / blockSize);
+    const occY = Math.ceil(dimensions.y / blockSize);
+    const occZ = Math.ceil(dimensions.z / blockSize);
+    const occData = new Uint8Array(occX * occY * occZ);
+    const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
+
+    for (let bx = 0; bx < occX; bx++) {
+      const xStart = bx * blockSize;
+      const xEnd = Math.min(xStart + blockSize, dimensions.x);
+      for (let by = 0; by < occY; by++) {
+        const yStart = by * blockSize;
+        const yEnd = Math.min(yStart + blockSize, dimensions.y);
+        for (let bz = 0; bz < occZ; bz++) {
+          const zStart = bz * blockSize;
+          const zEnd = Math.min(zStart + blockSize, dimensions.z);
+          let occupied = false;
+          for (let x = xStart; x < xEnd && !occupied; x++) {
+            for (let y = yStart; y < yEnd && !occupied; y++) {
+              for (let z = zStart; z < zEnd; z++) {
+                // LesParser と同じインデックス計算式: x + X * (y + Y * z)
+                const index = x + dimensions.x * (y + dimensions.y * z);
+                if (uint8Array[index] !== 0) {
+                  occupied = true;
+                  break;
+                }
+              }
+            }
+          }
+          occData[bx + occX * (by + occY * bz)] = occupied ? 255 : 0;
+        }
+      }
+    }
+
+    const texture = new THREE.Data3DTexture(occData, occX, occY, occZ);
+    texture.format = THREE.RedFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.unpackAlignment = 1;
+    texture.needsUpdate = true;
+
+    return { texture, dimensions: new THREE.Vector3(occX, occY, occZ) };
+  }, [voxelData]);
+
   // テクスチャの破棄（GPUメモリリーク防止）
   useEffect(() => {
     return () => {
@@ -585,6 +639,12 @@ function VoxelMesh(props: VoxelMeshProps) {
     };
   }, [paletteTexture]);
 
+  useEffect(() => {
+    return () => {
+      occupancyData.texture.dispose();
+    };
+  }, [occupancyData]);
+
   // 初期化: voxelDataとテクスチャをuniformsに設定
   useEffect(() => {
     if (!materialRef.current) return;
@@ -595,7 +655,10 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uTexture.value = dataTexture;
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-  }, [voxelData, dataTexture, paletteTexture]);
+    u.uOccupancyTexture.value = occupancyData.texture;
+    u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
+    u.uBlockSize.value = 8.0;
+  }, [voxelData, dataTexture, paletteTexture, occupancyData]);
 
   // Levaコントロールの値が変更されたときにuniformsを直接更新
   useEffect(() => {
@@ -635,6 +698,9 @@ function VoxelMesh(props: VoxelMeshProps) {
     u.uEdgeFadeStart.value = edgeFadeStart;
     u.uEdgeFadeEnd.value = edgeFadeEnd;
 
+    // Occupancy Grid
+    u.uUseOccupancy.value = useOccupancy ? 1.0 : 0.0;
+
     // ボクセル値表示制御
     u.uValueVisibility.value = valueVisibility.map((v) => (v ? 1.0 : 0.0));
 
@@ -654,6 +720,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     edgeFadeStart,
     edgeFadeEnd,
     valueVisibility,
+    useOccupancy,
     paletteTexture,
   ]);
 
@@ -935,6 +1002,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       () => ({
         Reset: button(() => resetAllSettings()),
         usePerspective: { value: true, label: 'Perspective' },
+        useOccupancy: { value: true, label: 'Occupancy Grid' },
         edgeHighlight: folder(
           {
             enableEdgeHighlight: { value: defaultValues.current.enableEdgeHighlight },
@@ -1068,6 +1136,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
     const {
       usePerspective,
+      useOccupancy,
       fov,
       far,
       alpha,
@@ -1121,6 +1190,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         showScaleBar: defaultValues.current.showScaleBar,
         showBoundingBox: defaultValues.current.showBoundingBox,
         showGrid: defaultValues.current.showGrid,
+        useOccupancy: true,
         ...voxelResetValues,
       });
 
@@ -1881,6 +1951,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
             edgeFadeEnd={edgeMaxDistance}
             valueVisibility={valueVisibility}
             customColors={customColors}
+            useOccupancy={useOccupancy}
           />
 
           {showBoundingBox && (

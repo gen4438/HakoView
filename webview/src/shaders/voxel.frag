@@ -25,6 +25,10 @@ uniform float uEdgeFadeEnd; // エッジフェード終了距離
 uniform mat4 uModelMatrixInverse;
 uniform float uValueVisibility[16]; // 各ボクセル値の表示フラグ (0.0=非表示, 1.0=表示)
 uniform float uIsOrthographic; // 0.0=perspective, 1.0=orthographic
+uniform sampler3D uOccupancyTexture; // Occupancy Grid (R8, 0=empty/255=occupied)
+uniform vec3 uOccupancyDimensions;   // Grid dimensions (ceil(shape/blockSize))
+uniform float uBlockSize;            // Block size (default 8)
+uniform float uUseOccupancy;         // 0.0=off, 1.0=on
 
 varying vec3 vOrigin;
 varying vec3 vDirection;
@@ -311,6 +315,8 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         if (hitDistance > tExit) break;
 
         // 次のセルをサンプリング（常に中心）
+        // Occupancy Grid チェックの前にサンプリングし、
+        // ブロック境界の浮動小数点精度問題で実体ボクセルをスキップすることを防ぐ
         samplePos = position + vec3(0.5);
         voxel = sampleVoxel(samplePos);
         bool currentOccupied = (voxel.a > 0.0);
@@ -319,6 +325,61 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         if (!prevOccupied && currentOccupied) {
             hit = true;
             break;
+        }
+
+        // セルが空の場合のみ Occupancy Grid による空ブロックスキップを試みる
+        if (!currentOccupied && uUseOccupancy > 0.5) {
+            // 現在セルが属するブロックインデックスを計算
+            vec3 vidx = floor(position + vec3(0.5) + 0.5 * uVoxelShape);
+            vec3 bidx = floor(vidx / uBlockSize);
+
+            // ブロック範囲内かつ空ブロックの場合のみスキップ
+            if (!(any(lessThan(bidx, vec3(0.0))) ||
+                  any(greaterThanEqual(bidx, uOccupancyDimensions)))) {
+
+                // Occupancy テクスチャをサンプリング
+                vec3 tc = (bidx + 0.5) / uOccupancyDimensions;
+                if (texture(uOccupancyTexture, tc).r < 0.5) {
+                    // 空ブロック: ブロック遠端までスキップ
+                    vec3 farEdge = (bidx + step(vec3(0.0), stepVec)) * uBlockSize
+                                 - 0.5 * uVoxelShape;
+                    vec3 tBlockFar = (farEdge - origin) * invDir;
+                    float tSkip = min(min(tBlockFar.x, tBlockFar.y), tBlockFar.z);
+
+                    // t空間でクリッピング境界を超えたら終了
+                    if (tSkip > tExit) break;
+
+                    // スキップで横切った面の法線を計算
+                    vec3 skipMask = vec3(0.0);
+                    if (tBlockFar.x <= tBlockFar.y && tBlockFar.x <= tBlockFar.z) {
+                        skipMask.x = 1.0;
+                    } else if (tBlockFar.y <= tBlockFar.z) {
+                        skipMask.y = 1.0;
+                    } else {
+                        skipMask.z = 1.0;
+                    }
+
+                    // DDA状態をスキップ先で再初期化
+                    vec3 pNew = origin + (tSkip + 1e-4) * direction;
+                    position = floor(pNew + halfOdd + sgn * 1e-4) - halfOdd;
+                    vec3 nb = position + step(vec3(0.0), stepVec);
+                    tMax = (nb - origin) * invDir;
+
+                    // 着地セルをサンプリング（ブロック境界の表面を見逃さない）
+                    samplePos = position + vec3(0.5);
+                    voxel = sampleVoxel(samplePos);
+                    if (voxel.a > 0.0) {
+                        // 空→実体の遷移をスキップ境界で検出
+                        hitDistance = tSkip;
+                        hitNormal = -stepVec * skipMask;
+                        hit = true;
+                        break;
+                    }
+
+                    prevOccupied = false;
+                    continue;
+                }
+            }
         }
 
         prevOccupied = currentOccupied;
