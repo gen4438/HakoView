@@ -116,6 +116,7 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 
     // --- クリッピング面との交差を統一的に処理 ---
     bool clippedAtEnter = false;
+    vec3 clippingNormalWS = vec3(0.0); // スライスモード用：クリッピング面の法線（world空間）
     if (uEnableClipping > 0.5) {
         if (uClippingMode < 0.5) {
             // Mode 0: Off (何もしない)
@@ -134,7 +135,12 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                 float tXMax = (uSliceXMax - originWS.x) / directionWS.x;
 
                 if (normalModeX) {
-                    tEnter = max(tEnter, min(tXMin, tXMax));
+                    float newTEnter = max(tEnter, min(tXMin, tXMax));
+                    if (newTEnter > tEnter + 1e-5) {
+                        // X軸のクリッピング面でtEnterが更新された
+                        clippingNormalWS = vec3(-sign(directionWS.x), 0.0, 0.0);
+                    }
+                    tEnter = newTEnter;
                     tExit = min(tExit, max(tXMin, tXMax));
                 } else {
                     float tHiddenStart = min(tXMin, tXMax);
@@ -143,7 +149,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                     if (currentStart >= tHiddenEnd) {
                         // OK
                     } else if (currentStart >= tHiddenStart) {
-                        tEnter = max(tEnter, tHiddenEnd);
+                        float newTEnter = max(tEnter, tHiddenEnd);
+                        if (newTEnter > tEnter + 1e-5) {
+                            clippingNormalWS = vec3(-sign(directionWS.x), 0.0, 0.0);
+                        }
+                        tEnter = newTEnter;
                     } else {
                         tExit = min(tExit, tHiddenStart);
                     }
@@ -170,7 +180,12 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                 float tYMax = (uSliceYMax - originWS.y) / directionWS.y;
 
                 if (normalModeY) {
-                    tEnter = max(tEnter, min(tYMin, tYMax));
+                    float newTEnter = max(tEnter, min(tYMin, tYMax));
+                    if (newTEnter > tEnter + 1e-5) {
+                        // Y軸のクリッピング面でtEnterが更新された
+                        clippingNormalWS = vec3(0.0, -sign(directionWS.y), 0.0);
+                    }
+                    tEnter = newTEnter;
                     tExit = min(tExit, max(tYMin, tYMax));
                 } else {
                     float tHiddenStart = min(tYMin, tYMax);
@@ -179,7 +194,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                     if (currentStart >= tHiddenEnd) {
                         // OK
                     } else if (currentStart >= tHiddenStart) {
-                        tEnter = max(tEnter, tHiddenEnd);
+                        float newTEnter = max(tEnter, tHiddenEnd);
+                        if (newTEnter > tEnter + 1e-5) {
+                            clippingNormalWS = vec3(0.0, -sign(directionWS.y), 0.0);
+                        }
+                        tEnter = newTEnter;
                     } else {
                         tExit = min(tExit, tHiddenStart);
                     }
@@ -206,7 +225,12 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                 float tZMax = (uSliceZMax - originWS.z) / directionWS.z;
 
                 if (normalModeZ) {
-                    tEnter = max(tEnter, min(tZMin, tZMax));
+                    float newTEnter = max(tEnter, min(tZMin, tZMax));
+                    if (newTEnter > tEnter + 1e-5) {
+                        // Z軸のクリッピング面でtEnterが更新された
+                        clippingNormalWS = vec3(0.0, 0.0, -sign(directionWS.z));
+                    }
+                    tEnter = newTEnter;
                     tExit = min(tExit, max(tZMin, tZMax));
                 } else {
                     float tHiddenStart = min(tZMin, tZMax);
@@ -215,7 +239,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
                     if (currentStart >= tHiddenEnd) {
                         // OK
                     } else if (currentStart >= tHiddenStart) {
-                        tEnter = max(tEnter, tHiddenEnd);
+                        float newTEnter = max(tEnter, tHiddenEnd);
+                        if (newTEnter > tEnter + 1e-5) {
+                            clippingNormalWS = vec3(0.0, 0.0, -sign(directionWS.z));
+                        }
+                        tEnter = newTEnter;
                     } else {
                         tExit = min(tExit, tHiddenStart);
                     }
@@ -296,19 +324,26 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
 
     // （外部スタート時のみ）入口面の即時ヒット確定
     if (!insideStart && prevOccupied) {
-        vec3 n;
+        vec3 nWS; // ワールド空間の法線（ライティング用）
+        vec3 nOS; // オブジェクト空間の法線（エッジハイライト用）
 
         // クリッピング面で開始した場合は、クリッピング面の法線を使用
         if (clippedAtEnter && uEnableClipping > 0.5) {
             if (uClippingMode < 1.5 && uClippingMode > 0.5) {
-                // Sliceモード: 軸方向の法線（カメラ側を向く = レイ方向の逆）
-                n = vec3(0.0);
-                if (int(uSliceAxis) == 0) n.x = -sign(direction.x);
-                else if (int(uSliceAxis) == 1) n.y = -sign(direction.y);
-                else n.z = -sign(direction.z);
+                // Sliceモード: 記録されたクリッピング面の法線（world空間）を使用
+                // 法線がゼロベクトルの場合（レイがクリッピング軸に平行など）、
+                // レイの逆方向をフォールバックとして使用
+                if (length(clippingNormalWS) < 0.1) {
+                    nWS = -normalize(directionWS);
+                } else {
+                    nWS = clippingNormalWS;
+                }
+                // ワールド空間からオブジェクト空間へ変換（方向ベクトルとして変換）
+                nOS = normalize((uModelMatrixInverse * vec4(nWS, 0.0)).xyz);
             } else {
                 // Customモード: クリッピング面の法線
-                n = normalize(uClippingPlane.xyz);
+                nWS = normalize(uClippingPlane.xyz);
+                nOS = normalize((uModelMatrixInverse * vec4(nWS, 0.0)).xyz);
             }
         } else {
             // どの軸のスラブで入射したか（tEnter は tMin3 の最大）
@@ -316,11 +351,16 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
             if (tMin3.y >= tMin3.x && tMin3.y >= tMin3.z) entryAxis = 1;
             if (tMin3.z >= tMin3.x && tMin3.z >= tMin3.y) entryAxis = 2;
 
-            // 外向き法線は「-sign(direction[axis])」
-            n = vec3(0.0);
-            if (entryAxis == 0) n.x = -sign(direction.x);
-            else if (entryAxis == 1) n.y = -sign(direction.y);
-            else                     n.z = -sign(direction.z);
+            // オブジェクト空間の法線を計算
+            nOS = vec3(0.0);
+            if (entryAxis == 0) nOS.x = -sign(direction.x);
+            else if (entryAxis == 1) nOS.y = -sign(direction.y);
+            else                     nOS.z = -sign(direction.z);
+
+            // オブジェクト空間からワールド空間へ変換（法線は逆転置行列で変換）
+            // 法線変換行列 = transpose(inverse(modelMatrix)) = transpose(uModelMatrixInverse)
+            mat3 normalMatrix = transpose(mat3(uModelMatrixInverse));
+            nWS = normalize(normalMatrix * nOS);
         }
 
         // 入口面でヒット確定
@@ -333,10 +373,11 @@ vec4 voxelTrace(vec3 originWS, vec3 directionWS) {
         vec3 lightDir = uIsOrthographic > 0.5
             ? normalize(cameraPosition - realPosition)
             : normalize(vOrigin - realPosition);
-        float diff = max(dot(n, lightDir), 0.0);
+        float diff = max(dot(nWS, lightDir), 0.0);
 
         float lighting = uAmbientIntensity + uLightIntensity * diff;
-        vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, n);
+        // エッジハイライトにはオブジェクト空間の法線を使用
+        vec3 finalColor = applyEdgeHighlight(voxel.rgb * lighting, realPosition, nOS);
         return vec4(finalColor, voxel.a);
     }
 
