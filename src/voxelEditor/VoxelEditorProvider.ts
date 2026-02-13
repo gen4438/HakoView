@@ -10,7 +10,7 @@ import {
 } from './messaging';
 import { LesParser } from '../voxelParser/LesParser';
 import { ParseError } from '../voxelParser/validation';
-import { registerViewerPanel } from './panelRegistry';
+import { registerViewerPanel, findPreviewTabInOtherGroup } from './panelRegistry';
 
 /**
  * CustomEditorProvider for .leS voxel files
@@ -60,7 +60,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   async openCustomDocument(
     uri: vscode.Uri,
     openContext: vscode.CustomDocumentOpenContext,
-    token: vscode.CancellationToken
+    _token: vscode.CancellationToken
   ): Promise<VoxelDocument> {
     try {
       console.log('Opening custom document:', uri.toString());
@@ -81,10 +81,16 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   async resolveCustomEditor(
     document: VoxelDocument,
     webviewPanel: vscode.WebviewPanel,
-    token: vscode.CancellationToken
+    _token: vscode.CancellationToken
   ): Promise<void> {
     try {
       console.log('Resolving custom editor for:', document.uri.toString());
+
+      // 他のグループにPreview Modeのhakoviewタブがある場合を検出
+      // Note: webviewPanel.viewColumnはresolveCustomEditor時点ではundefinedの場合があるため、
+      // activeTabGroupのviewColumnをフォールバックとして使用
+      const currentColumn = webviewPanel.viewColumn ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
+      const existingPreview = findPreviewTabInOtherGroup(currentColumn);
 
       // Webviewパネルのタイトルを設定
       const fileName = document.uri.path.split('/').pop() || 'Voxel Viewer';
@@ -108,6 +114,15 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
 
       // メッセージハンドリング設定
       this.setupMessageHandling(document, webviewPanel);
+
+      // パネルのactive/visible状態をWebviewに通知（描画の重複防止）
+      webviewPanel.onDidChangeViewState((e) => {
+        postMessageToWebview(e.webviewPanel.webview, {
+          type: 'viewStateChanged',
+          active: e.webviewPanel.active,
+          visible: e.webviewPanel.visible,
+        });
+      });
       console.log('Message handling setup complete');
 
       // 初期データ送信（パース成功時）
@@ -117,6 +132,35 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
       } else if (document.error) {
         sendError(webviewPanel.webview, document.error.message);
         console.log('Error sent to webview:', document.error.message);
+      }
+
+      // 既存のPreviewタブがあったグループにエディタタブごと移動
+      if (existingPreview) {
+        const targetColumn = existingPreview.viewColumn;
+        const targetTab = existingPreview.tab;
+        console.log('Found existing preview tab in group', targetColumn, ', will move new panel there');
+        // resolveCustomEditor完了後にVS Codeが内部セットアップを終えてからタブを移動
+        // 150msの遅延でVS Codeのレイアウト処理が完了するのを待つ
+        setTimeout(async () => {
+          try {
+            if (webviewPanel.active) {
+              // 先にタブを移動（移動先グループがまだ存在する状態で）
+              await vscode.commands.executeCommand('moveActiveEditor', {
+                to: 'position',
+                by: 'group',
+                value: targetColumn,
+              });
+              // 移動後に古いプレビュータブを閉じる
+              try {
+                await vscode.window.tabGroups.close(targetTab);
+              } catch {
+                // タブが既に閉じられている場合は無視
+              }
+            }
+          } catch (e) {
+            console.error('Failed to move editor to target group:', e);
+          }
+        }, 150);
       }
     } catch (error) {
       console.error('Error resolving custom editor:', error);
@@ -129,9 +173,9 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
    */
   async saveCustomDocument(
     document: VoxelDocument,
-    cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken
   ): Promise<void> {
-    return document.save(cancellation);
+    return document.save(_cancellation);
   }
 
   /**
@@ -140,9 +184,9 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   async saveCustomDocumentAs(
     document: VoxelDocument,
     destination: vscode.Uri,
-    cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken
   ): Promise<void> {
-    return document.saveAs(destination, cancellation);
+    return document.saveAs(destination, _cancellation);
   }
 
   /**
@@ -150,7 +194,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
    */
   async revertCustomDocument(
     document: VoxelDocument,
-    cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken
   ): Promise<void> {
     return document.reload();
   }
@@ -161,9 +205,9 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
   async backupCustomDocument(
     document: VoxelDocument,
     context: vscode.CustomDocumentBackupContext,
-    cancellation: vscode.CancellationToken
+    _cancellation: vscode.CancellationToken
   ): Promise<vscode.CustomDocumentBackup> {
-    return document.backup(context.destination, cancellation);
+    return document.backup(context.destination, _cancellation);
   }
 
   /**
@@ -228,6 +272,12 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
         case 'ready':
           // Webview準備完了時にデータを送信
           this.sendSettings(webviewPanel.webview);
+          // 初期のactive/visible状態を送信
+          postMessageToWebview(webviewPanel.webview, {
+            type: 'viewStateChanged',
+            active: webviewPanel.active,
+            visible: webviewPanel.visible,
+          });
           if (document.dataset) {
             sendVoxelData(webviewPanel.webview, document.dataset);
           } else if (document.error) {

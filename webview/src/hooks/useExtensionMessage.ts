@@ -21,6 +21,7 @@ export function useExtensionMessage() {
   const [settings, setSettings] = useState<ViewerSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isActive, setIsActive] = useState<boolean>(true);
   const loadStartRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -61,6 +62,10 @@ export function useExtensionMessage() {
         case 'showError':
           setError(message.message);
           setIsLoading(false);
+          break;
+
+        case 'viewStateChanged':
+          setIsActive(message.active);
           break;
       }
     };
@@ -199,6 +204,7 @@ export function useExtensionMessage() {
     settings,
     error,
     isLoading,
+    isActive,
     loadFile,
     loadFileFromPath,
     saveState,

@@ -10,7 +10,8 @@ export type ExtensionToWebviewMessage =
   | { type: 'updateSettings'; settings: ViewerSettings }
   | { type: 'clearViewer' }
   | { type: 'restoreState'; state: ViewerState }
-  | { type: 'showError'; message: string };
+  | { type: 'showError'; message: string }
+  | { type: 'viewStateChanged'; active: boolean; visible: boolean };
 
 /**
  * ビューアーの設定
