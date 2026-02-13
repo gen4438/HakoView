@@ -89,7 +89,8 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
       // 他のグループにPreview Modeのhakoviewタブがある場合を検出
       // Note: webviewPanel.viewColumnはresolveCustomEditor時点ではundefinedの場合があるため、
       // activeTabGroupのviewColumnをフォールバックとして使用
-      const currentColumn = webviewPanel.viewColumn ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
+      const currentColumn =
+        webviewPanel.viewColumn ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
       const existingPreview = findPreviewTabInOtherGroup(currentColumn);
 
       // Webviewパネルのタイトルを設定
@@ -125,6 +126,50 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
       });
       console.log('Message handling setup complete');
 
+      // ファイル監視の設定（自動再読み込み）
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(
+          vscode.Uri.joinPath(document.uri, '..'),
+          document.uri.path.split('/').pop() || ''
+        )
+      );
+
+      // 変更イベントのハンドリング（デバウンス付き）
+      let reloadTimeout: NodeJS.Timeout | null = null;
+      const handleFileChange = async () => {
+        if (reloadTimeout) {
+          clearTimeout(reloadTimeout);
+        }
+        reloadTimeout = setTimeout(async () => {
+          try {
+            const content = await vscode.workspace.fs.readFile(document.uri);
+            const newDocument = new VoxelDocument(document.uri, content);
+            if (newDocument.dataset) {
+              sendVoxelData(webviewPanel.webview, newDocument.dataset, true);
+              console.log('File reloaded automatically:', fileName);
+            } else if (newDocument.error) {
+              sendError(webviewPanel.webview, newDocument.error.message);
+              console.error('Error reloading file:', newDocument.error.message);
+            }
+          } catch (error) {
+            console.error('Failed to reload file:', error);
+            // パース失敗時は現在の表示を維持
+          }
+        }, 500); // 500msのデバウンス
+      };
+
+      watcher.onDidChange(handleFileChange);
+
+      // クリーンアップ
+      webviewPanel.onDidDispose(() => {
+        watcher.dispose();
+        if (reloadTimeout) {
+          clearTimeout(reloadTimeout);
+        }
+      });
+
+      this.context.subscriptions.push(watcher);
+
       // 初期データ送信（パース成功時）
       if (document.dataset) {
         sendVoxelData(webviewPanel.webview, document.dataset);
@@ -138,7 +183,11 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
       if (existingPreview) {
         const targetColumn = existingPreview.viewColumn;
         const targetTab = existingPreview.tab;
-        console.log('Found existing preview tab in group', targetColumn, ', will move new panel there');
+        console.log(
+          'Found existing preview tab in group',
+          targetColumn,
+          ', will move new panel there'
+        );
         // resolveCustomEditor完了後にVS Codeが内部セットアップを終えてからタブを移動
         // 150msの遅延でVS Codeのレイアウト処理が完了するのを待つ
         setTimeout(async () => {

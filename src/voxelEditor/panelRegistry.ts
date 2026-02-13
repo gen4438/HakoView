@@ -59,7 +59,7 @@ export function findPreviewTabInOtherGroup(
     for (const tab of tabGroup.tabs) {
       if (
         tab.input instanceof vscode.TabInputCustom &&
-        tab.input.viewType === 'hakoview.lesViewer' &&
+        (tab.input.viewType === 'hakoview.lesViewer' || tab.input.viewType === 'hakoview.viewer') &&
         tab.isPreview
       ) {
         return { tab, viewColumn: tabGroup.viewColumn };

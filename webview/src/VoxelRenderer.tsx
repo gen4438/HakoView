@@ -1584,11 +1584,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           .map((_, i) => defaultPalette[i] || '#000000')
       );
 
-      // カメラ位置もリセット
-      if (controlsRef.current) {
-        controlsRef.current.reset();
-        stopControlsInertia();
-      }
+      // カメラ位置のリセットは呼び出し側で行う（initialCameraPositionが後で定義されるため）
     }, [set, setClipping, maxDpr, stopControlsInertia]);
 
     // 軸視点に移動する関数
@@ -1723,8 +1719,15 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         // Perspectiveカメラの場合: カメラの距離を調整
         const perspCamera = camera as THREE.PerspectiveCamera;
         const fovRad = (perspCamera.fov * Math.PI) / 180;
-        // モデルがビューに収まる距離を計算（少し余白を持たせる）
-        const distance = (radius / Math.tan(fovRad / 2)) * 1.2;
+        const aspect = width / height;
+
+        // 縦方向と横方向の両方に収まる距離を計算
+        const distanceV = (radius / Math.tan(fovRad / 2)) * 1.2; // 縦方向
+        const fovH = 2 * Math.atan(Math.tan(fovRad / 2) * aspect); // 横方向FOV
+        const distanceH = (radius / Math.tan(fovH / 2)) * 1.2; // 横方向
+
+        // 両方に収まる距離（大きい方）を採用
+        const distance = Math.max(distanceV, distanceH);
 
         // 現在の向きを維持したまま距離だけ調整
         const newPosition = new THREE.Vector3().copy(target).addScaledVector(direction, distance);
@@ -1733,6 +1736,32 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
 
       camera.updateProjectionMatrix();
       controlsRef.current.update();
+    }, [voxelData.dimensions, width, height]);
+
+    // 現在の画面サイズに基づいた初期カメラ位置を計算
+    const calculateInitialCameraPosition = useCallback(() => {
+      const { x, y, z } = voxelData.dimensions;
+      const radius = Math.sqrt(x * x + y * y + z * z) / 2;
+      const defaultFovRad = (defaultValues.current.fov * Math.PI) / 180;
+      const aspect = width / height;
+
+      // 縦方向と横方向の両方に収まる距離を計算
+      const distanceV = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
+      const fovH = 2 * Math.atan(Math.tan(defaultFovRad / 2) * aspect);
+      const distanceH = (radius / Math.tan(fovH / 2)) * 1.2;
+      const distance = Math.max(distanceV, distanceH);
+
+      // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
+      const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
+      return new THREE.Vector3(dir.x * distance, dir.y * distance, dir.z * distance);
+    }, [voxelData.dimensions, width, height]);
+
+    // 現在の画面サイズに基づいた初期Orthoズームを計算
+    const calculateInitialOrthoZoom = useCallback(() => {
+      const { x, y, z } = voxelData.dimensions;
+      const maxDim = Math.max(x, y, z);
+      const zoom = Math.min(width, height) / (maxDim * 1.4);
+      return Math.max(0.1, zoom);
     }, [voxelData.dimensions, width, height]);
 
     // 数値バッファのタイムアウト設定（2秒後に自動クリア）
@@ -2065,18 +2094,62 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           }
         }
 
-        // "R"キー（大文字）で設定すべてリセット
+        // "R"キー（大文字）で設定すべてリセット（カメラも画面サイズに合わせて初期位置に）
         if (key === 'R') {
           clearNumericBuffer();
           resetAllSettings();
+
+          // カメラ位置もリセット（現在の画面サイズに基づいた初期位置に）
+          if (controlsRef.current) {
+            const camera = controlsRef.current.object;
+            const target = controlsRef.current.target;
+
+            // 現在の画面サイズに基づいた初期位置を計算
+            const initialPos = calculateInitialCameraPosition();
+            camera.position.copy(initialPos);
+            target.set(0, 0, 0);
+
+            // カメラの姿勢を初期状態にリセット（Z軸が上）
+            camera.up.set(0, 0, 1);
+
+            // Orthographicカメラの場合はズームもリセット
+            if ((camera as any).isOrthographicCamera) {
+              const orthoCamera = camera as THREE.OrthographicCamera;
+              orthoCamera.zoom = calculateInitialOrthoZoom();
+              orthoCamera.updateProjectionMatrix();
+            }
+
+            camera.updateProjectionMatrix();
+            controlsRef.current.update();
+            stopControlsInertia();
+          }
           return;
         }
 
-        // "r"キー（小文字）でカメラのみリセット
+        // "r"キー（小文字）でカメラのみリセット（位置・角度を初期値に、画面サイズ考慮）
         if (key === 'r') {
           clearNumericBuffer();
           if (controlsRef.current) {
-            controlsRef.current.reset();
+            const camera = controlsRef.current.object;
+            const target = controlsRef.current.target;
+
+            // 現在の画面サイズに基づいた初期位置を計算
+            const initialPos = calculateInitialCameraPosition();
+            camera.position.copy(initialPos);
+            target.set(0, 0, 0);
+
+            // カメラの姿勢を初期状態にリセット（Z軸が上）
+            camera.up.set(0, 0, 1);
+
+            // Orthographicカメラの場合はズームもリセット
+            if ((camera as any).isOrthographicCamera) {
+              const orthoCamera = camera as THREE.OrthographicCamera;
+              orthoCamera.zoom = calculateInitialOrthoZoom();
+              orthoCamera.updateProjectionMatrix();
+            }
+
+            camera.updateProjectionMatrix();
+            controlsRef.current.update();
             stopControlsInertia();
           }
           return;
@@ -2252,23 +2325,32 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     // 自動計算されたfarとユーザー指定のfarの大きい方を使用
     const effectiveFar = Math.max(autoFar, far);
 
-    // モデル全体が画面に収まるカメラ初期位置を計算（初回のみ使用）
+    // モデル全体が画面に収まるカメラ初期位置を計算（固定、リサイズ時は再計算しない）
     const initialCameraPosition = useMemo(() => {
       const { x, y, z } = voxelData.dimensions;
       // バウンディングスフィアの半径
       const radius = Math.sqrt(x * x + y * y + z * z) / 2;
-      // デフォルトFOVでちょうど収まる距離（少し余白を追加）
+      // デフォルトFOVでちょうど収まる距離（初回の画面サイズで計算）
       const defaultFovRad = (defaultValues.current.fov * Math.PI) / 180;
-      const distance = (radius / Math.tan(defaultFovRad / 2)) * 1.2;
+      const aspect = width / height;
+
+      // 縦方向と横方向の両方に収まる距離を計算
+      const distanceV = (radius / Math.tan(defaultFovRad / 2)) * 1.2; // 縦方向
+      const fovH = 2 * Math.atan(Math.tan(defaultFovRad / 2) * aspect); // 横方向FOV
+      const distanceH = (radius / Math.tan(fovH / 2)) * 1.2; // 横方向
+
+      // 両方に収まる距離（大きい方）を採用
+      const distance = Math.max(distanceV, distanceH);
+
       // 視線方向 (2.5, 1.0, 0.5) を正規化してdistance倍
       const dir = new THREE.Vector3(2.5, 1.0, 0.5).normalize();
       return new THREE.Vector3(dir.x * distance, dir.y * distance, dir.z * distance);
-    }, [voxelData.dimensions]);
+    }, [voxelData.dimensions]); // width, heightは依存配列から削除
 
-    // OrthographicCamera用の初期ズーム値を計算
+    // OrthographicCamera用の初期ズーム値を計算（固定、リサイズ時は再計算しない）
     const orthoInitialZoomRef = useRef<number>(0);
     useMemo(() => {
-      if (orthoInitialZoomRef.current !== 0) return;
+      if (orthoInitialZoomRef.current !== 0) return; // 初回のみ計算
       const { x, y, z } = voxelData.dimensions;
       const maxDim = Math.max(x, y, z);
       // Perspectiveと同等の見え方になるよう調整
