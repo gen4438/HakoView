@@ -278,8 +278,12 @@ export function ScaleBar({ dimensions, voxelLength }: ScaleBarProps) {
       return;
     }
 
-    // View direction: camera → model center (origin)
-    _viewDir.copy(camera.position).negate().normalize();
+    const isOrtho = !!(camera as any).isOrthographicCamera;
+
+    // For orthographic cameras, view direction is constant (camera forward)
+    if (isOrtho) {
+      camera.getWorldDirection(_viewDir);
+    }
 
     const tickLen = modelSize * 0.025;
     const SILHOUETTE_THRESHOLD = 0.01;
@@ -301,6 +305,17 @@ export function ScaleBar({ dimensions, voxelLength }: ScaleBarProps) {
       for (const edge of edges) {
         if (edge.axis !== axis) continue;
 
+        // Compute edge midpoint first (needed for perspective view direction)
+        _edgeMid.addVectors(edge.start, edge.end).multiplyScalar(0.5);
+
+        // For perspective cameras, compute view direction per-edge
+        // to account for ray divergence. Using a single global direction
+        // (as in orthographic) causes incorrect silhouette detection and
+        // scale bars overlapping with voxels.
+        if (!isOrtho) {
+          _viewDir.subVectors(_edgeMid, camera.position).normalize();
+        }
+
         const d0 = edge.faceNormals[0].dot(_viewDir);
         const d1 = edge.faceNormals[1].dot(_viewDir);
 
@@ -310,8 +325,7 @@ export function ScaleBar({ dimensions, voxelLength }: ScaleBarProps) {
         const isBack = d0 > SILHOUETTE_THRESHOLD && d1 > SILHOUETTE_THRESHOLD;
         if (isFront || isBack) continue;
 
-        // Project edge midpoint to screen space
-        _edgeMid.addVectors(edge.start, edge.end).multiplyScalar(0.5);
+        // Project edge midpoint to screen space (edgeMid already computed)
         _projected.copy(_edgeMid).project(camera);
         const screenX = (1 + _projected.x) / 2; // 0=left, 1=right
         const screenY = (1 - _projected.y) / 2; // 0=top, 1=bottom
