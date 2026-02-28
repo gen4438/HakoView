@@ -23,6 +23,11 @@ export function getWebviewHtml(options: WebviewHtmlOptions): string {
     vscode.Uri.joinPath(extensionUri, 'webview', 'dist', 'webview.js')
   );
 
+  // Webview用スタイルシートのURI取得
+  const styleUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'webview', 'dist', 'webview.css')
+  );
+
   // CSP用のnonce生成（セキュリティ）
   const nonce = customNonce || getNonce();
 
@@ -46,6 +51,7 @@ export function getWebviewHtml(options: WebviewHtmlOptions): string {
 	<meta http-equiv="Content-Security-Policy" content="${csp}">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Voxel Viewer</title>
+	<link rel="stylesheet" href="${styleUri}">
 	<style>
 		* {
 			margin: 0;

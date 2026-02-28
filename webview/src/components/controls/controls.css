@@ -1,0 +1,203 @@
+/* controls.css — コントロール部品の共通スタイル
+ * VSCode CSS変数によるテーマ対応、2カラムレイアウト (FR-021)
+ */
+
+/* --- 共通行レイアウト --- */
+.control-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  min-height: 28px;
+}
+
+.control-row.button-row {
+  grid-template-columns: 1fr;
+  justify-items: stretch;
+}
+
+.control-label {
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+  user-select: none;
+}
+
+.control-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* --- スライダー --- */
+.slider-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.slider-input input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--vscode-focusBorder);
+}
+
+.slider-input input[type='number'] {
+  width: 52px;
+  padding: 2px 4px;
+  font-size: 11px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  text-align: right;
+  -moz-appearance: textfield;
+}
+
+.slider-input input[type='number']::-webkit-outer-spin-button,
+.slider-input input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.slider-input input[type='number']:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* --- トグルスイッチ --- */
+.toggle-input {
+  justify-content: flex-start;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.toggle-switch input[type='checkbox'] {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: var(--vscode-input-border, #555);
+  border-radius: 16px;
+  transition: background-color 0.2s ease;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 12px;
+  width: 12px;
+  left: 2px;
+  bottom: 2px;
+  background-color: var(--vscode-foreground);
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--vscode-button-background);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+.toggle-switch input:focus + .toggle-slider {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+
+/* --- カラーコントロール --- */
+.color-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  border: 1px solid var(--vscode-input-border, #555);
+  flex-shrink: 0;
+}
+
+.color-input input[type='color'] {
+  width: 32px;
+  height: 20px;
+  padding: 0 2px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+  cursor: pointer;
+}
+
+.color-visibility-checkbox {
+  margin-right: 4px;
+  accent-color: var(--vscode-focusBorder);
+}
+
+/* --- セレクト --- */
+.select-input select {
+  width: 100%;
+  padding: 2px 4px;
+  font-size: 12px;
+  background: var(--vscode-dropdown-background);
+  color: var(--vscode-dropdown-foreground);
+  border: 1px solid var(--vscode-dropdown-border, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.select-input select:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* --- ボタン --- */
+.control-button {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.control-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.control-button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+/* --- ハイコントラスト対応 --- */
+@media (forced-colors: active) {
+  .toggle-slider {
+    border: 1px solid ButtonText;
+  }
+  .control-button {
+    border: 1px solid ButtonText;
+  }
+}
