@@ -3,13 +3,15 @@
  * T044 [US5] FR-018 準拠
  *
  * - ClippingMode: Off / Slice / Custom
- * - Slice モード時: スライス軸 (X/Y/Z)、開始・終了ポジションスライダー
+ * - Slice モード時: スライス軸 (X/Y/Z)、開始・終了ポジションスライダー、
+ *   スライス1/2切替、スライス面の表示切替
  * - Custom モード時: 法線ベクトル (X/Y/Z)、平面距離
  */
 import React from 'react';
 import { useControlStore } from '../../store/controlStore';
 import { SliderControl } from '../controls/SliderControl';
 import { SelectControl } from '../controls/SelectControl';
+import { ToggleControl } from '../controls/ToggleControl';
 import { ButtonControl } from '../controls/ButtonControl';
 import type { ClippingMode, SliceAxis } from '../../store/controlTypes';
 
@@ -40,7 +42,22 @@ export const ClippingTab: React.FC = () => {
   const customNormalY = useControlStore((s) => s.customNormalY);
   const customNormalZ = useControlStore((s) => s.customNormalZ);
   const customDistance = useControlStore((s) => s.customDistance);
+  const alwaysShowSlicePlanes = useControlStore((s) => s.alwaysShowSlicePlanes);
+  const voxelDims = useControlStore((s) => s.voxelDims);
   const set = useControlStore((s) => s.set);
+
+  // 現在操作対象のスライス (1 or 2) — ストアで共有
+  const activeSlice = useControlStore((s) => s.activeSlice);
+
+  // ボクセルサイズに基づく動的な最大値
+  const sliceMaxX = voxelDims.x;
+  const sliceMaxY = voxelDims.y;
+  const sliceMaxZ = voxelDims.z;
+  const currentSliceMax = sliceAxis === 'X' ? sliceMaxX : sliceAxis === 'Y' ? sliceMaxY : sliceMaxZ;
+
+  // カスタム平面の距離範囲: ボクセル対角線の半径
+  const maxDim = Math.max(voxelDims.x, voxelDims.y, voxelDims.z);
+  const distanceRange = Math.ceil(maxDim);
 
   /** 現在の軸に対応するスライスポジションを返す */
   const currentSlicePos1 =
@@ -90,21 +107,46 @@ export const ClippingTab: React.FC = () => {
             options={SLICE_AXIS_OPTIONS}
             onChange={(v) => set({ sliceAxis: v as SliceAxis })}
           />
+          {/* 操作対象のスライス切替 */}
+          <div className="control-row">
+            <label className="control-label">操作対象</label>
+            <div className="control-input">
+              <div className="slice-toggle-group">
+                <button
+                  className={`slice-toggle-btn ${activeSlice === 1 ? 'active' : ''}`}
+                  onClick={() => set({ activeSlice: 1 })}
+                >
+                  スライス 1
+                </button>
+                <button
+                  className={`slice-toggle-btn ${activeSlice === 2 ? 'active' : ''}`}
+                  onClick={() => set({ activeSlice: 2 })}
+                >
+                  スライス 2
+                </button>
+              </div>
+            </div>
+          </div>
           <SliderControl
-            label="スライス位置（開始）"
+            label={`スライス 1 (${sliceAxis})`}
             value={currentSlicePos1}
             min={0}
-            max={1023}
+            max={currentSliceMax}
             step={1}
             onChange={handleSlicePos1}
           />
           <SliderControl
-            label="スライス位置（終了）"
+            label={`スライス 2 (${sliceAxis})`}
             value={currentSlicePos2}
             min={0}
-            max={1023}
+            max={currentSliceMax}
             step={1}
             onChange={handleSlicePos2}
+          />
+          <ToggleControl
+            label="スライス面を常時表示"
+            checked={alwaysShowSlicePlanes}
+            onChange={(v) => set({ alwaysShowSlicePlanes: v })}
           />
         </>
       )}
@@ -139,8 +181,8 @@ export const ClippingTab: React.FC = () => {
           <SliderControl
             label="距離"
             value={customDistance}
-            min={-512}
-            max={512}
+            min={-distanceRange}
+            max={distanceRange}
             step={1}
             onChange={(v) => set({ customDistance: v })}
           />

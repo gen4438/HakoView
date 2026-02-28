@@ -61,18 +61,20 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
         <ButtonControl label="設定を開く" onClick={() => onOpenSettings?.()} />
       </div>
 
-      {/* 16個のカラーコントロール（0〜15） */}
-      {Array.from({ length: 16 }, (_, i) => (
-        <ColorControl
-          key={i}
-          label={`カラー ${i}`}
-          value={customColors[i] ?? '#000000'}
-          onChange={(color) => updateColor(i, color)}
-          showVisibility={true}
-          visible={valueVisibility[i] ?? i !== 0}
-          onVisibilityChange={(visible) => updateVisibility(i, visible)}
-        />
-      ))}
+      {/* 16個のカラーコントロール（0〜15）- グリッド配置 */}
+      <div className="color-grid">
+        {Array.from({ length: 16 }, (_, i) => (
+          <ColorControl
+            key={i}
+            label={`${i}`}
+            value={customColors[i] ?? '#000000'}
+            onChange={(color) => updateColor(i, color)}
+            showVisibility={true}
+            visible={valueVisibility[i] ?? i !== 0}
+            onVisibilityChange={(visible) => updateVisibility(i, visible)}
+          />
+        ))}
+      </div>
       {/* カラータブのリセット */}
       <div
         style={{

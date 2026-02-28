@@ -39,6 +39,9 @@ export const DEFAULT_VISIBILITY: boolean[] = [
 ];
 
 export const DEFAULT_CONTROL_STATE: ControlState = {
+  // Initialization Info
+  voxelDims: { x: 1, y: 1, z: 1 },
+  maxDpr: 1.0,
   // Camera
   usePerspective: true,
   fov: 50,
@@ -72,6 +75,10 @@ export const DEFAULT_CONTROL_STATE: ControlState = {
   customNormalY: 0,
   customNormalZ: 1,
   customDistance: 0,
+  alwaysShowSlicePlanes: false,
+  activeSlice: 1,
+  // Camera Reset
+  cameraResetRequest: 0,
   // Colors
   customColors: DEFAULT_PALETTE,
   valueVisibility: DEFAULT_VISIBILITY,

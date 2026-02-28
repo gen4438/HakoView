@@ -14,6 +14,7 @@ import { Accordion } from '../drawer/Accordion';
 export const DisplayTab: React.FC = () => {
   const alpha = useControlStore((s) => s.alpha);
   const dpr = useControlStore((s) => s.dpr);
+  const maxDpr = useControlStore((s) => s.maxDpr);
   const useOccupancy = useControlStore((s) => s.useOccupancy);
   const showScaleBar = useControlStore((s) => s.showScaleBar);
   const showBoundingBox = useControlStore((s) => s.showBoundingBox);
@@ -22,7 +23,12 @@ export const DisplayTab: React.FC = () => {
   const edgeThickness = useControlStore((s) => s.edgeThickness);
   const edgeIntensity = useControlStore((s) => s.edgeIntensity);
   const edgeMaxDistance = useControlStore((s) => s.edgeMaxDistance);
+  const voxelDims = useControlStore((s) => s.voxelDims);
   const set = useControlStore((s) => s.set);
+
+  const maxDim = Math.max(voxelDims.x, voxelDims.y, voxelDims.z);
+  // エッジハイライトの最大距離: ボクセル対角線の約1.5倍
+  const edgeMaxDistanceMax = Math.max(200, Math.ceil(maxDim * 1.5));
 
   return (
     <div className="tab-content">
@@ -38,7 +44,7 @@ export const DisplayTab: React.FC = () => {
         label="解像度 (DPR)"
         value={dpr}
         min={0.5}
-        max={typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2}
+        max={Math.max(maxDpr, 4.0)}
         step={0.1}
         onChange={(v) => set({ dpr: v })}
       />
@@ -67,9 +73,9 @@ export const DisplayTab: React.FC = () => {
         <SliderControl
           label="太さ"
           value={edgeThickness}
-          min={0.1}
-          max={5}
-          step={0.1}
+          min={0.01}
+          max={0.15}
+          step={0.01}
           onChange={(v) => set({ edgeThickness: v })}
         />
         <SliderControl
@@ -83,9 +89,9 @@ export const DisplayTab: React.FC = () => {
         <SliderControl
           label="最大距離"
           value={edgeMaxDistance}
-          min={50}
-          max={2000}
-          step={10}
+          min={10}
+          max={edgeMaxDistanceMax}
+          step={5}
           onChange={(v) => set({ edgeMaxDistance: v })}
         />
       </Accordion>

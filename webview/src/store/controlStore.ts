@@ -32,6 +32,8 @@ export const useControlStore = create<ControlStore>()(
       // initDefaults で渡された dims/maxDpr を再適用
       if (_initDims) {
         zustandSet({
+          voxelDims: { ..._initDims },
+          maxDpr: _initMaxDpr,
           dpr: _initMaxDpr,
           slicePosition1X: _initDims.x,
           slicePosition1Y: _initDims.y,
@@ -74,7 +76,12 @@ export const useControlStore = create<ControlStore>()(
         far: DEFAULT_CONTROL_STATE.far,
         lightIntensity: DEFAULT_CONTROL_STATE.lightIntensity,
         ambientIntensity: DEFAULT_CONTROL_STATE.ambientIntensity,
+        cameraResetRequest: zustandGet().cameraResetRequest + 1,
       });
+    },
+
+    requestCameraReset: () => {
+      zustandSet({ cameraResetRequest: zustandGet().cameraResetRequest + 1 });
     },
 
     resetColors: () => {
@@ -107,6 +114,8 @@ export const useControlStore = create<ControlStore>()(
         customNormalY: DEFAULT_CONTROL_STATE.customNormalY,
         customNormalZ: DEFAULT_CONTROL_STATE.customNormalZ,
         customDistance: DEFAULT_CONTROL_STATE.customDistance,
+        alwaysShowSlicePlanes: DEFAULT_CONTROL_STATE.alwaysShowSlicePlanes,
+        activeSlice: DEFAULT_CONTROL_STATE.activeSlice,
       });
     },
 
@@ -161,6 +170,8 @@ export const useControlStore = create<ControlStore>()(
       }
 
       zustandSet({
+        voxelDims: { ...dims },
+        maxDpr,
         dpr: maxDpr,
         // slicePosition1 = Pos (上限) = 各軸の寸法値 (levaのデフォルトと同じ)
         // slicePosition2 = Neg (下限) = 0 (DEFAULT_CONTROL_STATE のデフォルト値のまま)

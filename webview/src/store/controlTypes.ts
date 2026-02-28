@@ -12,14 +12,20 @@ export type TabId = 'display' | 'camera' | 'colors' | 'clipping';
  * Zustandストアのstate部分に対応する。
  */
 export interface ControlState {
+  // ---- Initialization Info (read-only from tabs) ----
+  /** ボクセル次元（initDefaultsで設定） */
+  voxelDims: { x: number; y: number; z: number };
+  /** 最大DPR（initDefaultsで設定） */
+  maxDpr: number;
+
   // ---- Camera ----
   usePerspective: boolean;
-  fov: number; // 0–180, step 5
-  far: number; // 500–3000, step 100
+  fov: number; // 10–120, step 1
+  far: number; // 動的: maxDim基準
 
   // ---- Lighting ----
-  lightIntensity: number; // 0.0–2.0, step 0.01
-  ambientIntensity: number; // 0.0–1.0, step 0.01
+  lightIntensity: number; // 0.0–2.0, step 0.1
+  ambientIntensity: number; // 0.0–1.0, step 0.1
 
   // ---- Display ----
   alpha: number; // 0.0–1.0, step 0.01
@@ -31,10 +37,10 @@ export interface ControlState {
 
   // ---- Edge Highlight ----
   enableEdgeHighlight: boolean;
-  edgeThickness: number; // 0.02–0.15, step 0.01
+  edgeThickness: number; // 0.01–0.15, step 0.01
   edgeColor: string; // hex color e.g. '#ffffff'
   edgeIntensity: number; // 0.0–1.0, step 0.01
-  edgeMaxDistance: number; // 50–max(edgeMaxRange, 200), step 10
+  edgeMaxDistance: number; // 動的: maxDim基準
 
   // ---- Clipping ----
   clippingMode: ClippingMode;
@@ -48,7 +54,15 @@ export interface ControlState {
   customNormalX: number; // -1–1, step 0.01
   customNormalY: number;
   customNormalZ: number;
-  customDistance: number; // -distanceRange–distanceRange, step 1
+  customDistance: number; // 動的: maxDim基準
+  /** スライス平面の常時表示 (ssキーに対応) */
+  alwaysShowSlicePlanes: boolean;
+  /** 操作対象のスライス (1 or 2) — ドロワーとキーボード/マウスで共有 */
+  activeSlice: 1 | 2;
+
+  // ---- Camera Reset Request ----
+  /** カメラリセット要求カウンタ（インクリメントでリセットをトリガー） */
+  cameraResetRequest: number;
 
   // ---- Colors ----
   customColors: string[]; // length 16, hex color strings
@@ -66,8 +80,10 @@ export interface ControlActions {
   reset: () => void;
   /** 表示タブの設定をリセット */
   resetDisplay: () => void;
-  /** カメラタブの設定をリセット */
+  /** カメラタブの設定をリセット（カメラ位置もリセット） */
   resetCamera: () => void;
+  /** カメラリセットを要求（カメラ位置・姿勢を初期化） */
+  requestCameraReset: () => void;
   /** カラータブの設定をリセット */
   resetColors: () => void;
   /** クリッピングタブの設定をリセット */

@@ -21,6 +21,7 @@ import { useControlStore } from './store/controlStore';
 import type { ControlState } from './store/controlTypes';
 import { useShallow } from 'zustand/react/shallow';
 import { isInputFocused } from './utils/focusUtils';
+import { updateCameraPose } from './components/tabs/CameraTab';
 import { useWindowSize } from 'react-use';
 import * as THREE from 'three';
 import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
@@ -181,6 +182,12 @@ function CameraStateManager({
       perspFov: isPerspective ? (camera as THREE.PerspectiveCamera).fov : 0,
       orthoZoom: !isPerspective ? (camera as THREE.OrthographicCamera).zoom : 0,
     };
+
+    // カメラ姿勢をCameraTabに通知
+    updateCameraPose({
+      position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+      target: { x: target.x, y: target.y, z: target.z },
+    });
   });
 
   // カメラタイプが切り替わったときにスケール変換して復元モードを開始
@@ -1059,15 +1066,24 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
     const [numericBuffer, setNumericBuffer] = useState<string>('');
     const numericBufferTimeoutRef = useRef<number | null>(null);
 
-    // 現在操作対象のスライス（1 or 2）
-    const [activeSlice, setActiveSlice] = useState<1 | 2>(1);
+    // 現在操作対象のスライス（1 or 2）— ストアで共有
+    const activeSlice = useControlStore((s) => s.activeSlice);
+    const setActiveSlice = useCallback((v: 1 | 2 | ((prev: 1 | 2) => 1 | 2)) => {
+      if (typeof v === 'function') {
+        const current = useControlStore.getState().activeSlice;
+        useControlStore.getState().set({ activeSlice: v(current) });
+      } else {
+        useControlStore.getState().set({ activeSlice: v });
+      }
+    }, []);
 
     // スライス平面の可視化状態（両方のスライスを表示）
     const [showSlicePlanes, setShowSlicePlanes] = useState<boolean>(false);
     const slicePlaneTimeoutRef = useRef<number | null>(null);
 
     // スライス平面を常に表示するかどうか
-    const [alwaysShowSlicePlanes, setAlwaysShowSlicePlanes] = useState<boolean>(false);
+    // alwaysShowSlicePlanes はストアから取得（ドロワーのUIとssキーで共有）
+    const alwaysShowSlicePlanes = useControlStore((s) => s.alwaysShowSlicePlanes);
 
     // 最後に押されたキーを記録（"gg"の実装用）
     const lastKeyRef = useRef<string>('');
@@ -1564,6 +1580,36 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       showSlicePlanesTemporarily,
     ]);
 
+    // ストアからのカメラリセット要求を監視
+    const cameraResetRequest = useControlStore((s) => s.cameraResetRequest);
+    const cameraResetRequestRef = useRef(cameraResetRequest);
+    useEffect(() => {
+      if (cameraResetRequest !== cameraResetRequestRef.current) {
+        cameraResetRequestRef.current = cameraResetRequest;
+        if (controlsRef.current) {
+          const camera = controlsRef.current.object;
+          const target = controlsRef.current.target;
+          const initialPos = calculateInitialCameraPosition();
+          camera.position.copy(initialPos);
+          target.set(0, 0, 0);
+          camera.up.set(0, 0, 1);
+          if ((camera as any).isOrthographicCamera) {
+            const orthoCamera = camera as THREE.OrthographicCamera;
+            orthoCamera.zoom = calculateInitialOrthoZoom();
+            orthoCamera.updateProjectionMatrix();
+          }
+          camera.updateProjectionMatrix();
+          controlsRef.current.update();
+          stopControlsInertia();
+        }
+      }
+    }, [
+      cameraResetRequest,
+      calculateInitialCameraPosition,
+      calculateInitialOrthoZoom,
+      stopControlsInertia,
+    ]);
+
     // キーボードショートカット
     useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -1607,7 +1653,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         if (key === 's') {
           if (clippingMode === 'Slice' && lastKeyRef.current === 's') {
             // ssキーでスライス平面の表示モードを切り替え
-            setAlwaysShowSlicePlanes((prev) => !prev);
+            storeSet({ alwaysShowSlicePlanes: !alwaysShowSlicePlanes });
             lastKeyRef.current = '';
             if (lastKeyTimeoutRef.current !== null) {
               window.clearTimeout(lastKeyTimeoutRef.current);
@@ -2007,6 +2053,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       resetAllSettings,
       fitModelToView,
       showSlicePlanesTemporarily,
+      alwaysShowSlicePlanes,
     ]);
 
     // クリッピングプレーン計算

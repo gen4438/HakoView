@@ -19,7 +19,7 @@ export const ColorControl: React.FC<ColorControlProps> = ({
   onVisibilityChange,
 }) => {
   return (
-    <div className="control-row">
+    <div className="color-cell">
       {showVisibility && (
         <input
           type="checkbox"
@@ -30,11 +30,14 @@ export const ColorControl: React.FC<ColorControlProps> = ({
           aria-label={`${label} visibility`}
         />
       )}
-      <label className="control-label">{label}</label>
-      <div className="control-input color-input">
-        <span className="color-swatch" style={{ backgroundColor: value }} aria-hidden="true" />
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} tabIndex={0} />
-      </div>
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={0}
+        className="color-picker"
+      />
+      <span className="color-id-label">{label}</span>
     </div>
   );
 };
