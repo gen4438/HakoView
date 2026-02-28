@@ -474,7 +474,7 @@ function CaptureHelper({
 }: {
   captureRef: React.MutableRefObject<((width?: number, height?: number) => Promise<string>) | null>;
 }) {
-  const { gl, camera, scene } = useThree();
+  const { gl, camera, scene, invalidate } = useThree();
 
   // オフスクリーンキャプチャ用のgizmoシーン（GizmoHelperは別ビューポートで描画されるため再現が必要）
   const gizmoResources = useMemo(() => {
@@ -570,6 +570,9 @@ function CaptureHelper({
     captureRef.current = async (width?: number, height?: number) => {
       if (!width || !height) {
         // サイズ指定なしの場合は現在のサイズでキャプチャ
+        // frameloop="demand"モードではinvalidate()で描画を要求し、
+        // 描画完了後にキャプチャする
+        invalidate();
         return new Promise<string>((resolve) => {
           requestAnimationFrame(() => {
             resolve(gl.domElement.toDataURL('image/png'));
@@ -2258,7 +2261,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
         )}
 
         <Canvas
-          gl={{ antialias: false, alpha: true, powerPreference: 'high-performance' }}
+          gl={{
+            antialias: false,
+            alpha: true,
+            powerPreference: 'high-performance',
+            preserveDrawingBuffer: true,
+          }}
           dpr={effectiveDpr}
           style={{ width: '100%', height: '100%', background: 'transparent' }}
           frameloop={isVisible ? 'demand' : 'never'}
