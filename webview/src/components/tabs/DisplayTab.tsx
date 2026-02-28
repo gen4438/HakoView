@@ -89,7 +89,7 @@ export const DisplayTab: React.FC = () => {
           onChange={(v) => set({ edgeMaxDistance: v })}
         />
       </Accordion>
-      {/* FR-019: 全設定リセット */}
+      {/* 表示タブのリセット */}
       <div
         style={{
           marginTop: '12px',
@@ -98,8 +98,8 @@ export const DisplayTab: React.FC = () => {
         }}
       >
         <ButtonControl
-          label="全設定をリセット"
-          onClick={() => useControlStore.getState().reset()}
+          label="表示をリセット"
+          onClick={() => useControlStore.getState().resetDisplay()}
         />
       </div>
     </div>

@@ -7,6 +7,7 @@ import React from 'react';
 import { useControlStore } from '../../store/controlStore';
 import { SliderControl } from '../controls/SliderControl';
 import { ToggleControl } from '../controls/ToggleControl';
+import { ButtonControl } from '../controls/ButtonControl';
 
 export const CameraTab: React.FC = () => {
   const usePerspective = useControlStore((s) => s.usePerspective);
@@ -55,6 +56,19 @@ export const CameraTab: React.FC = () => {
         step={0.1}
         onChange={(v) => set({ ambientIntensity: v })}
       />
+      {/* カメラタブのリセット */}
+      <div
+        style={{
+          marginTop: '12px',
+          borderTop: '1px solid var(--vscode-widget-border, #454545)',
+          paddingTop: '12px',
+        }}
+      >
+        <ButtonControl
+          label="カメラをリセット"
+          onClick={() => useControlStore.getState().resetCamera()}
+        />
+      </div>
     </div>
   );
 };

@@ -73,6 +73,19 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
           onVisibilityChange={(visible) => updateVisibility(i, visible)}
         />
       ))}
+      {/* カラータブのリセット */}
+      <div
+        style={{
+          marginTop: '12px',
+          borderTop: '1px solid var(--vscode-widget-border, #454545)',
+          paddingTop: '12px',
+        }}
+      >
+        <ButtonControl
+          label="カラーをリセット"
+          onClick={() => useControlStore.getState().resetColors()}
+        />
+      </div>
     </div>
   );
 };

@@ -13,8 +13,9 @@
   background: var(--vscode-sideBar-background, #252526);
   border-left: 1px solid var(--vscode-sideBar-border, #454545);
   z-index: 900;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   /* スライドインアニメーション（composite-only transform で GPU合成） */
   transition: transform 0.2s ease;
   will-change: transform;
@@ -33,7 +34,15 @@
 
 .drawer-content {
   padding: 0;
-  min-height: 100%;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.drawer-footer {
+  flex-shrink: 0;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--vscode-widget-border, #454545);
 }
 
 /* --- トグルボタン（ドロワーの外側の耳タブ） --- */

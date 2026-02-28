@@ -10,6 +10,7 @@ import React from 'react';
 import { useControlStore } from '../../store/controlStore';
 import { SliderControl } from '../controls/SliderControl';
 import { SelectControl } from '../controls/SelectControl';
+import { ButtonControl } from '../controls/ButtonControl';
 import type { ClippingMode, SliceAxis } from '../../store/controlTypes';
 
 /** ClippingMode の選択肢 */
@@ -145,6 +146,19 @@ export const ClippingTab: React.FC = () => {
           />
         </>
       )}
+      {/* クリッピングタブのリセット */}
+      <div
+        style={{
+          marginTop: '12px',
+          borderTop: '1px solid var(--vscode-widget-border, #454545)',
+          paddingTop: '12px',
+        }}
+      >
+        <ButtonControl
+          label="クリッピングをリセット"
+          onClick={() => useControlStore.getState().resetClipping()}
+        />
+      </div>
     </div>
   );
 };

@@ -51,6 +51,65 @@ export const useControlStore = create<ControlStore>()(
       }
     },
 
+    resetDisplay: () => {
+      zustandSet({
+        alpha: DEFAULT_CONTROL_STATE.alpha,
+        dpr: _initDims ? _initMaxDpr : DEFAULT_CONTROL_STATE.dpr,
+        useOccupancy: DEFAULT_CONTROL_STATE.useOccupancy,
+        showScaleBar: DEFAULT_CONTROL_STATE.showScaleBar,
+        showBoundingBox: DEFAULT_CONTROL_STATE.showBoundingBox,
+        showGrid: DEFAULT_CONTROL_STATE.showGrid,
+        enableEdgeHighlight: DEFAULT_CONTROL_STATE.enableEdgeHighlight,
+        edgeThickness: DEFAULT_CONTROL_STATE.edgeThickness,
+        edgeColor: DEFAULT_CONTROL_STATE.edgeColor,
+        edgeIntensity: DEFAULT_CONTROL_STATE.edgeIntensity,
+        edgeMaxDistance: DEFAULT_CONTROL_STATE.edgeMaxDistance,
+      });
+    },
+
+    resetCamera: () => {
+      zustandSet({
+        usePerspective: DEFAULT_CONTROL_STATE.usePerspective,
+        fov: DEFAULT_CONTROL_STATE.fov,
+        far: DEFAULT_CONTROL_STATE.far,
+        lightIntensity: DEFAULT_CONTROL_STATE.lightIntensity,
+        ambientIntensity: DEFAULT_CONTROL_STATE.ambientIntensity,
+      });
+    },
+
+    resetColors: () => {
+      const colors = [...DEFAULT_CONTROL_STATE.customColors];
+      if (_initColormap) {
+        Object.entries(_initColormap).forEach(([key, color]) => {
+          const index = parseInt(key, 10);
+          if (!isNaN(index) && index >= 0 && index < 16) {
+            colors[index] = color;
+          }
+        });
+      }
+      zustandSet({
+        customColors: colors,
+        valueVisibility: [...DEFAULT_CONTROL_STATE.valueVisibility],
+      });
+    },
+
+    resetClipping: () => {
+      zustandSet({
+        clippingMode: DEFAULT_CONTROL_STATE.clippingMode,
+        sliceAxis: DEFAULT_CONTROL_STATE.sliceAxis,
+        slicePosition1X: _initDims ? _initDims.x : DEFAULT_CONTROL_STATE.slicePosition1X,
+        slicePosition1Y: _initDims ? _initDims.y : DEFAULT_CONTROL_STATE.slicePosition1Y,
+        slicePosition1Z: _initDims ? _initDims.z : DEFAULT_CONTROL_STATE.slicePosition1Z,
+        slicePosition2X: DEFAULT_CONTROL_STATE.slicePosition2X,
+        slicePosition2Y: DEFAULT_CONTROL_STATE.slicePosition2Y,
+        slicePosition2Z: DEFAULT_CONTROL_STATE.slicePosition2Z,
+        customNormalX: DEFAULT_CONTROL_STATE.customNormalX,
+        customNormalY: DEFAULT_CONTROL_STATE.customNormalY,
+        customNormalZ: DEFAULT_CONTROL_STATE.customNormalZ,
+        customDistance: DEFAULT_CONTROL_STATE.customDistance,
+      });
+    },
+
     updateColor: (index: number, color: string) => {
       const current = zustandGet().customColors;
       const next = [...current];
@@ -68,15 +127,24 @@ export const useControlStore = create<ControlStore>()(
     setSlicePosition: (slice: 1 | 2, value: number) => {
       const { sliceAxis } = zustandGet();
       if (sliceAxis === 'X') {
-        if (slice === 1) {zustandSet({ slicePosition1X: value });}
-        else {zustandSet({ slicePosition2X: value });}
+        if (slice === 1) {
+          zustandSet({ slicePosition1X: value });
+        } else {
+          zustandSet({ slicePosition2X: value });
+        }
       } else if (sliceAxis === 'Y') {
-        if (slice === 1) {zustandSet({ slicePosition1Y: value });}
-        else {zustandSet({ slicePosition2Y: value });}
+        if (slice === 1) {
+          zustandSet({ slicePosition1Y: value });
+        } else {
+          zustandSet({ slicePosition2Y: value });
+        }
       } else {
         // Z
-        if (slice === 1) {zustandSet({ slicePosition1Z: value });}
-        else {zustandSet({ slicePosition2Z: value });}
+        if (slice === 1) {
+          zustandSet({ slicePosition1Z: value });
+        } else {
+          zustandSet({ slicePosition2Z: value });
+        }
       }
     },
 

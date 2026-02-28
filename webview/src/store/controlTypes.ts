@@ -64,6 +64,14 @@ export interface ControlActions {
   set: (partial: Partial<ControlState>) => void;
   /** 全設定をデフォルト値にリセット（initDefaults で渡された dims/maxDpr/colormap を再適用） */
   reset: () => void;
+  /** 表示タブの設定をリセット */
+  resetDisplay: () => void;
+  /** カメラタブの設定をリセット */
+  resetCamera: () => void;
+  /** カラータブの設定をリセット */
+  resetColors: () => void;
+  /** クリッピングタブの設定をリセット */
+  resetClipping: () => void;
   /** 特定インデックスの色を更新 */
   updateColor: (index: number, color: string) => void;
   /** 特定インデックスの可視性を更新 */

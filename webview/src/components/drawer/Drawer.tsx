@@ -5,6 +5,8 @@ import { DisplayTab } from '../tabs/DisplayTab';
 import { CameraTab } from '../tabs/CameraTab';
 import { ColorsTab } from '../tabs/ColorsTab';
 import { ClippingTab } from '../tabs/ClippingTab';
+import { ButtonControl } from '../controls/ButtonControl';
+import { useControlStore } from '../../store/controlStore';
 import './Drawer.css';
 
 export interface DrawerProps {
@@ -100,6 +102,13 @@ export const Drawer: React.FC<DrawerProps> = ({
                 activeTab={activeTab}
                 onSaveColorSettings={onSaveColorSettings}
                 onOpenSettings={onOpenSettings}
+              />
+            </div>
+            {/* FR-019: 全設定リセット（全タブ共通） */}
+            <div className="drawer-footer">
+              <ButtonControl
+                label="全設定をリセット"
+                onClick={() => useControlStore.getState().reset()}
               />
             </div>
           </>
