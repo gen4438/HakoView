@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build": "node ../esbuild.webview.js",
-    "watch": "node ../esbuild.webview.js --watch"
+    "watch": "node ../esbuild.webview.js --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
@@ -12,16 +14,21 @@
     "@fortawesome/react-fontawesome": "^3.2.0",
     "@react-three/drei": "^9.92.0",
     "@react-three/fiber": "^8.15.0",
-    "leva": "^0.9.35",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-use": "^17.4.0",
-    "three": "^0.160.0"
+    "three": "^0.160.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/three": "^0.160.0",
-    "typescript": "^5.9.3"
+    "@types/vscode-webview": "^1.57.5",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
   }
 }

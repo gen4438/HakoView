@@ -1,0 +1,80 @@
+/* Accordion.css — アコーディオンセクションのスタイル（T029）
+ * sideBarSectionHeader CSS変数、展開アニメーション（max-height + overflow:hidden）
+ */
+
+.accordion {
+  border-bottom: 1px solid var(--vscode-sideBar-border, #454545);
+}
+
+.accordion:last-child {
+  border-bottom: none;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: var(
+    --vscode-sideBarSectionHeader-background,
+    var(--vscode-sideBar-background, #2d2d2d)
+  );
+  border: none;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-foreground, #cccccc));
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.accordion-header:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.accordion-header:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.accordion-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+  color: var(--vscode-foreground, #cccccc);
+  opacity: 0.7;
+}
+
+.accordion-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 折りたたみアニメーション: max-height + overflow:hidden */
+.accordion-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.2s ease;
+}
+
+.accordion-body--open {
+  max-height: 2000px; /* 十分な高さ */
+}
+
+/* ハイコントラスト対応 */
+@media (forced-colors: active) {
+  .accordion {
+    border-bottom: 1px solid ButtonText;
+  }
+  .accordion-header {
+    border: none;
+  }
+  .accordion-header:focus {
+    outline: 2px solid Highlight;
+  }
+}

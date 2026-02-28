@@ -4,6 +4,7 @@ import { ErrorDisplay } from './components/ErrorDisplay';
 import { LoadingState } from './components/LoadingState';
 import { HeaderInfo } from './components/HeaderInfo';
 import { SaveImageModal, ImageSize, PRESET_SIZES } from './components/SaveImageModal';
+import { Drawer } from './components/drawer/Drawer';
 import { VoxelRenderer, VoxelRendererRef } from './VoxelRenderer';
 import { useWindowSize } from 'react-use';
 
@@ -24,8 +25,13 @@ export const VoxelViewer: React.FC = () => {
   } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const rendererRef = useRef<VoxelRendererRef>(null);
   const { width: viewWidth, height: viewHeight } = useWindowSize();
+
+  const handleDrawerToggle = useCallback(() => {
+    setIsDrawerOpen((prev) => !prev);
+  }, []);
 
   // 画像サイズ設定を記憶（セッション内で保持）
   const [savedPreset, setSavedPreset] = useState<string>('current');
@@ -298,15 +304,32 @@ export const VoxelViewer: React.FC = () => {
       }}
     >
       {dropOverlay}
+      {/* ドロワー（VoxelRenderer の外側に配置） */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onToggle={handleDrawerToggle}
+        onSaveColorSettings={saveColorSettings}
+        onOpenSettings={openSettings}
+      />
       {voxelData && (
-        <VoxelRenderer
-          ref={rendererRef}
-          voxelData={voxelData}
-          settings={settings}
-          isVisible={isActive}
-          onSaveColorSettings={saveColorSettings}
-          onOpenSettings={openSettings}
-        />
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '100%',
+          }}
+        >
+          <VoxelRenderer
+            ref={rendererRef}
+            voxelData={voxelData}
+            settings={settings}
+            isVisible={isActive}
+            onSaveColorSettings={saveColorSettings}
+            onOpenSettings={openSettings}
+          />
+        </div>
       )}
       {voxelData && (
         <>

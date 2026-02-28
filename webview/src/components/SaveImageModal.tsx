@@ -96,7 +96,7 @@ export const SaveImageModal: React.FC<SaveImageModalProps> = ({
   return (
     <div
       style={{
-        position: 'fixed',
+        position: 'absolute',
         inset: 0,
         zIndex: 9999,
         display: 'flex',
