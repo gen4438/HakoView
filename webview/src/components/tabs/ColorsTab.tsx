@@ -64,7 +64,7 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
         label="カラープロファイル"
         value={colorProfile}
         options={[
-          { label: 'Hako (Default)', value: 'hako' },
+          { label: 'Hako', value: 'hako' },
           { label: 'SEM', value: 'sem' },
           { label: 'Grayscale', value: 'grayscale' },
           { label: 'Rainbow', value: 'rainbow' },
