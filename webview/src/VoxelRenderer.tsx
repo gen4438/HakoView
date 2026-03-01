@@ -86,7 +86,7 @@ interface VoxelRendererProps {
   voxelData: VoxelDataMessage;
   settings: ViewerSettings | null;
   isVisible?: boolean;
-  onSaveColorSettings?: (colormap: Record<string, string>) => void;
+  onSaveColorSettings?: (colormap: Record<string, string>, colorProfile: string) => void;
   onOpenSettings?: () => void;
 }
 
@@ -1156,14 +1156,9 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       });
       const jsonString = JSON.stringify(colormap, null, 2);
 
-      navigator.clipboard.writeText(jsonString).then(
-        () => {
-          console.log('カラー設定をクリップボードにコピーしました');
-        },
-        (err) => {
-          console.error('クリップボードへのコピーに失敗しました:', err);
-        }
-      );
+      navigator.clipboard.writeText(jsonString).catch((err) => {
+        console.error('クリップボードへのコピーに失敗しました:', err);
+      });
     }, [customColors]);
 
     // VSCodeの設定に保存
@@ -1171,13 +1166,12 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       if (!onSaveColorSettings) return;
 
       const colormap: Record<string, string> = {};
-      customColors.forEach((color, index) => {
+      useControlStore.getState().customColors.forEach((color, index) => {
         colormap[index.toString()] = color;
       });
-
-      onSaveColorSettings(colormap);
-      console.log('カラー設定をVSCodeの設定に保存しました');
-    }, [customColors, onSaveColorSettings]);
+      // カラーマップをcustomプロファイルとして保存する
+      onSaveColorSettings(colormap, 'custom');
+    }, [onSaveColorSettings]);
 
     // VSCodeの設定を開く
     const openSettingsPanel = useCallback(() => {
@@ -1273,31 +1267,35 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
       }))
     );
 
-    // ボクセルデータ初回ロード時にデフォルト値を初期化（DPR・スライス範囲・カラーマップ）
+    // ボクセルデータ初回ロード時にデフォルト値を初期化（DPR・スライス範囲・カラーマップ等）
     const voxelInitRef = useRef(false);
     useEffect(() => {
       if (!voxelInitRef.current) {
         voxelInitRef.current = true;
         useControlStore
           .getState()
-          .initDefaults({ x, y, z }, maxDpr, settings?.colormap ?? undefined);
+          .initDefaults(
+            { x, y, z },
+            maxDpr,
+            settings?.colormap ?? undefined,
+            settings?.colorProfile
+          );
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // settings.colormap が非同期で届いた場合にストアへ反映（初回のみ）
+    // settings.colormap が非同期で届いた場合にストアへ反映（初回および設定変更時）
     const colormapAppliedRef = useRef(false);
     useEffect(() => {
-      if (!colormapAppliedRef.current && settings?.colormap) {
+      if (!colormapAppliedRef.current && (settings?.colormap || settings?.colorProfile)) {
         colormapAppliedRef.current = true;
-        // initDefaults にカラーマップを記憶させつつ、現在の色を更新
-        useControlStore.getState().initDefaults({ x, y, z }, maxDpr, settings.colormap);
-        Object.entries(settings.colormap).forEach(([key, color]) => {
-          const index = parseInt(key, 10);
-          if (!isNaN(index) && index >= 0 && index < 16) {
-            useControlStore.getState().updateColor(index, color);
-          }
-        });
+        // initDefaults 内でカラーマップとプロファイルを処理し、配列の初期化を行う
+        useControlStore
+          .getState()
+          .initDefaults({ x, y, z }, maxDpr, settings?.colormap, settings?.colorProfile);
+      } else if (colormapAppliedRef.current && settings?.colormap) {
+        // 設定更新時（VSCode側でカラーマップが保存された場合）はグローバルのカラーマップを更新
+        useControlStore.getState().updateGlobalColormap(settings.colormap);
       }
     }, [settings, x, y, z, maxDpr]);
 

@@ -183,10 +183,11 @@ export function useExtensionMessage() {
   /**
    * カラー設定を保存
    */
-  const saveColorSettings = (colormap: Record<string, string>) => {
+  const saveColorSettings = (colormap: Record<string, string>, colorProfile: string) => {
     postMessage({
       command: 'saveColorSettings',
       colormap,
+      colorProfile,
     });
   };
 
@@ -196,6 +197,16 @@ export function useExtensionMessage() {
   const openSettings = () => {
     postMessage({
       command: 'openSettings',
+    });
+  };
+
+  /**
+   * カラープロファイルの変更を通知
+   */
+  const reportColorProfileChange = (profile: string) => {
+    postMessage({
+      command: 'colorProfileChanged',
+      profile,
     });
   };
 
@@ -213,5 +224,6 @@ export function useExtensionMessage() {
     saveImage,
     saveColorSettings,
     openSettings,
+    reportColorProfileChange,
   };
 }

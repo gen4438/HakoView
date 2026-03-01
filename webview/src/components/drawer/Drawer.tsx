@@ -13,8 +13,8 @@ export interface DrawerProps {
   isOpen: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
-  /** 色設定をVSCode設定に保存（ColorsTab に転送） */
-  onSaveColorSettings?: (colormap: Record<string, string>) => void;
+  /** 色設定をVSCode設定に保存（Custom カラーマップとして保存） */
+  onSaveColorSettings?: (colormap: Record<string, string>, colorProfile: string) => void;
   /** VSCode設定パネルを開く（ColorsTab に転送） */
   onOpenSettings?: () => void;
 }
@@ -29,7 +29,7 @@ const TABS: { id: TabId; label: string }[] = [
 
 interface TabContentProps {
   activeTab: TabId;
-  onSaveColorSettings?: (colormap: Record<string, string>) => void;
+  onSaveColorSettings?: (colormap: Record<string, string>, colorProfile: string) => void;
   onOpenSettings?: () => void;
 }
 

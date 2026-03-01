@@ -7,6 +7,18 @@ export type SliceAxis = 'X' | 'Y' | 'Z';
 /** タブID */
 export type TabId = 'display' | 'camera' | 'colors' | 'clipping';
 
+/** カラープロファイル */
+export type ColorProfile =
+  | 'hako'
+  | 'sem'
+  | 'grayscale'
+  | 'rainbow'
+  | 'tab10'
+  | 'set1'
+  | 'set2'
+  | 'set3'
+  | 'custom';
+
 /**
  * 全コントロール設定値の状態。
  * Zustandストアのstate部分に対応する。
@@ -65,6 +77,7 @@ export interface ControlState {
   cameraResetRequest: number;
 
   // ---- Colors ----
+  colorProfile: ColorProfile; // 現在のカラープロファイル
   customColors: string[]; // length 16, hex color strings
   valueVisibility: boolean[]; // length 16
 }
@@ -92,13 +105,26 @@ export interface ControlActions {
   updateColor: (index: number, color: string) => void;
   /** 特定インデックスの可視性を更新 */
   updateVisibility: (index: number, visible: boolean) => void;
+  /** カラープロファイルを変更 */
+  setColorProfile: (profile: ColorProfile) => void;
   /** アクティブスライスの位置を更新 */
   setSlicePosition: (slice: 1 | 2, value: number) => void;
-  /** デフォルト値を動的に設定（ボクセルデータ依存の値） */
+  /** カスタムカラーマップのグローバル設定を更新 */
+  updateGlobalColormap: (colormap: Record<string, string>) => void;
+  /**
+   * ボクセルデータのディメンションを設定し、デフォルトのカメラ位置などを初期化する。
+   * (Reactコンポーネントの初回ロード時に呼ばれる)
+   *
+   * @param dims - ボクセルデータの外形寸法
+   * @param maxDpr - 最大DPR値
+   * @param colormap - (Optional) VSCode拡張機能から渡されるデフォルトカラーマップ
+   * @param colorProfile - (Optional) VSCode拡張機能から渡されるデフォルトカラープロファイル。設定がなければcolormapに基づく
+   */
   initDefaults: (
     dims: { x: number; y: number; z: number },
     maxDpr: number,
-    colormap?: Record<string, string>
+    colormap?: Record<string, string>,
+    colorProfile?: string
   ) => void;
 }
 
