@@ -101,6 +101,7 @@
           "type": "string",
           "enum": [
             "lastUsed",
+            "custom",
             "hako",
             "sem",
             "grayscale",
@@ -108,8 +109,7 @@
             "tab10",
             "set1",
             "set2",
-            "set3",
-            "custom"
+            "set3"
           ],
           "default": "lastUsed",
           "description": "Default color profile to apply on startup. 'lastUsed' remembers the most recently used profile."
