@@ -75,6 +75,8 @@ export const Drawer: React.FC<DrawerProps> = ({
 
   return (
     <>
+      {/* ドロワー外クリックで閉じるための透明バックドロップ */}
+      {isOpen && <div className="drawer-backdrop" onClick={onToggle} aria-hidden="true" />}
       {/* トグルボタン（ドロワーの外側、常に表示） */}
       <button
         className={`drawer-toggle-btn ${isOpen ? 'drawer-toggle-btn--open' : ''}`}

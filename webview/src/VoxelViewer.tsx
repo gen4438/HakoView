@@ -137,7 +137,7 @@ export const VoxelViewer: React.FC = () => {
     reportError,
   ]);
 
-  // Ctrl+Sショートカット
+  // キーボードショートカット
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ctrl+S (Windows/Linux) または Cmd+S (Mac)
@@ -145,6 +145,19 @@ export const VoxelViewer: React.FC = () => {
         event.preventDefault();
         if (voxelData) {
           handleSaveImage();
+        }
+      }
+      // Tab キーでドロワー開閉
+      if (event.key === 'Tab') {
+        // input/select/textareaにフォーカスがある場合は通常のTab動作を維持
+        const target = event.target as HTMLElement;
+        const isFormElement =
+          target.tagName === 'INPUT' ||
+          target.tagName === 'SELECT' ||
+          target.tagName === 'TEXTAREA';
+        if (!isFormElement) {
+          event.preventDefault();
+          setIsDrawerOpen((prev) => !prev);
         }
       }
     };
