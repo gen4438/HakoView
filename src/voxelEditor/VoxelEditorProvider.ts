@@ -285,13 +285,19 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
    */
   private sendSettings(webview: vscode.Webview): void {
     const config = vscode.workspace.getConfiguration('hakoview');
-    const colormap = config.get<Record<string, string>>('defaultColormap');
+    const colormap = config.get<Record<string, string>>('customColormap');
+    let colorProfile = config.get<string>('defaultColorProfile');
     const devicePixelRatio = config.get<number | null>('devicePixelRatio');
+
+    if (colorProfile === 'lastUsed') {
+      colorProfile = this.context.globalState.get<string>('lastUsedColorProfile') || 'hako';
+    }
 
     postMessageToWebview(webview, {
       type: 'updateSettings',
       settings: {
         colormap,
+        colorProfile,
         devicePixelRatio,
       },
     });
@@ -304,7 +310,8 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
     // 設定変更の監視
     const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
       if (
-        e.affectsConfiguration('hakoview.defaultColormap') ||
+        e.affectsConfiguration('hakoview.customColormap') ||
+        e.affectsConfiguration('hakoview.defaultColorProfile') ||
         e.affectsConfiguration('hakoview.devicePixelRatio')
       ) {
         this.sendSettings(webviewPanel.webview);
@@ -454,7 +461,7 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
           try {
             const config = vscode.workspace.getConfiguration('hakoview');
             await config.update(
-              'defaultColormap',
+              'customColormap',
               message.colormap,
               vscode.ConfigurationTarget.Global
             );
@@ -463,6 +470,11 @@ export class VoxelEditorProvider implements vscode.CustomEditorProvider<VoxelDoc
             const errorMessage = `カラー設定の保存に失敗しました: ${error instanceof Error ? error.message : String(error)}`;
             vscode.window.showErrorMessage(errorMessage);
           }
+          break;
+
+        case 'colorProfileChanged':
+          // 最後に使用したプロファイルを記憶
+          await this.context.globalState.update('lastUsedColorProfile', message.profile);
           break;
 
         case 'openSettings':

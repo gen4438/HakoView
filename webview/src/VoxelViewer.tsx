@@ -7,6 +7,7 @@ import { SaveImageModal, ImageSize, PRESET_SIZES } from './components/SaveImageM
 import { Drawer } from './components/drawer/Drawer';
 import { VoxelRenderer, VoxelRendererRef } from './VoxelRenderer';
 import { useWindowSize } from 'react-use';
+import { useControlStore } from './store/controlStore';
 
 export const VoxelViewer: React.FC = () => {
   const {
@@ -22,12 +23,21 @@ export const VoxelViewer: React.FC = () => {
     saveImage,
     saveColorSettings,
     openSettings,
+    reportColorProfileChange,
   } = useExtensionMessage();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const rendererRef = useRef<VoxelRendererRef>(null);
   const { width: viewWidth, height: viewHeight } = useWindowSize();
+
+  const colorProfile = useControlStore((state) => state.colorProfile);
+
+  useEffect(() => {
+    if (colorProfile) {
+      reportColorProfileChange(colorProfile);
+    }
+  }, [colorProfile, reportColorProfileChange]);
 
   const handleDrawerToggle = useCallback(() => {
     setIsDrawerOpen((prev) => !prev);
@@ -308,7 +318,7 @@ export const VoxelViewer: React.FC = () => {
       <Drawer
         isOpen={isDrawerOpen}
         onToggle={handleDrawerToggle}
-        onSaveColorSettings={saveColorSettings}
+        onSaveColorSettings={(colormap) => saveColorSettings(colormap, colorProfile)}
         onOpenSettings={openSettings}
       />
       {voxelData && (

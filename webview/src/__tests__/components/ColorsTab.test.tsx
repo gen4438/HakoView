@@ -45,7 +45,9 @@ describe('ColorsTab', () => {
   it('アクションボタンが3つ表示される（コピー、保存、設定を開く）', () => {
     render(<ColorsTab />);
     expect(screen.getByRole('button', { name: /コピー/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /設定に保存/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Custom カラーマップとして保存/ })
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /設定を開く/ })).toBeInTheDocument();
   });
 });

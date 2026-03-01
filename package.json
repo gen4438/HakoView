@@ -72,7 +72,7 @@
     "configuration": {
       "title": "Hako View",
       "properties": {
-        "hakoview.defaultColormap": {
+        "hakoview.customColormap": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
@@ -96,6 +96,23 @@
             "15": "#17BECF"
           },
           "description": "Default colormap for voxel values. Format: { \"0\": \"#hexcolor\", \"1\": \"#hexcolor\", ... }."
+        },
+        "hakoview.defaultColorProfile": {
+          "type": "string",
+          "enum": [
+            "lastUsed",
+            "custom",
+            "hako",
+            "sem",
+            "grayscale",
+            "rainbow",
+            "tab10",
+            "set1",
+            "set2",
+            "set3"
+          ],
+          "default": "lastUsed",
+          "description": "Default color profile to apply on startup. 'lastUsed' remembers the most recently used profile."
         },
         "hakoview.devicePixelRatio": {
           "type": [

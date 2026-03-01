@@ -6,14 +6,16 @@
  */
 import React from 'react';
 import { useControlStore } from '../../store/controlStore';
+import type { ColorProfile } from '../../store/controlTypes';
 import { ColorControl } from '../controls/ColorControl';
 import { ButtonControl } from '../controls/ButtonControl';
+import { SelectControl } from '../controls/SelectControl';
 
 export interface ColorsTabProps {
   /** 色設定をクリップボードにコピー */
   onCopyColors?: () => void;
   /** 色設定をVSCode設定に保存 */
-  onSaveColorSettings?: (colormap: Record<string, string>) => void;
+  onSaveColorSettings?: (colormap: Record<string, string>, colorProfile: string) => void;
   /** VSCode設定パネルを開く */
   onOpenSettings?: () => void;
 }
@@ -23,6 +25,8 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
   onSaveColorSettings,
   onOpenSettings,
 }) => {
+  const colorProfile = useControlStore((s) => s.colorProfile);
+  const setColorProfile = useControlStore((s) => s.setColorProfile);
   const customColors = useControlStore((s) => s.customColors);
   const valueVisibility = useControlStore((s) => s.valueVisibility);
   const updateColor = useControlStore((s) => s.updateColor);
@@ -49,15 +53,34 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
     customColors.forEach((color, index) => {
       colormap[index.toString()] = color;
     });
-    onSaveColorSettings(colormap);
+    // HakoView上の「設定に保存」ボタンは、「カラーマップをcustomプロファイルとして保存」
+    onSaveColorSettings(colormap, 'custom');
   };
 
   return (
     <div className="tab-content">
+      {/* プロファイル選択 */}
+      <SelectControl
+        label="カラープロファイル"
+        value={colorProfile}
+        options={[
+          { label: 'Hako', value: 'hako' },
+          { label: 'SEM', value: 'sem' },
+          { label: 'Grayscale', value: 'grayscale' },
+          { label: 'Rainbow', value: 'rainbow' },
+          { label: 'Tab10 (Categorical)', value: 'tab10' },
+          { label: 'Set1 (Categorical)', value: 'set1' },
+          { label: 'Set2 (Categorical)', value: 'set2' },
+          { label: 'Set3 (Categorical)', value: 'set3' },
+          { label: 'Custom', value: 'custom' },
+        ]}
+        onChange={(val) => setColorProfile(val as ColorProfile)}
+      />
+
       {/* アクションボタン */}
       <div className="colors-actions">
         <ButtonControl label="カラーをコピー" onClick={handleCopyColors} />
-        <ButtonControl label="設定に保存" onClick={handleSave} />
+        <ButtonControl label="Custom カラーマップとして保存" onClick={handleSave} />
         <ButtonControl label="設定を開く" onClick={() => onOpenSettings?.()} />
       </div>
 
@@ -68,7 +91,18 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
             key={i}
             label={`${i}`}
             value={customColors[i] ?? '#000000'}
-            onChange={(color) => updateColor(i, color)}
+            onChange={(color) => {
+              const wasCustom = useControlStore.getState().colorProfile === 'custom';
+              updateColor(i, color);
+
+              if (wasCustom && onSaveColorSettings) {
+                const colormap: Record<string, string> = {};
+                useControlStore.getState().customColors.forEach((c, idx) => {
+                  colormap[idx.toString()] = c;
+                });
+                onSaveColorSettings(colormap, 'custom');
+              }
+            }}
             showVisibility={true}
             visible={valueVisibility[i] ?? i !== 0}
             onVisibilityChange={(visible) => updateVisibility(i, visible)}

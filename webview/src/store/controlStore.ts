@@ -1,7 +1,18 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { ControlStore, ControlState } from './controlTypes';
-import { DEFAULT_CONTROL_STATE } from './controlDefaults';
+import type { ControlStore, ControlState, ColorProfile } from './controlTypes';
+import {
+  DEFAULT_CONTROL_STATE,
+  DEFAULT_PALETTE,
+  DEFAULT_VISIBILITY,
+  SEM_PALETTE,
+  GRAYSCALE_PALETTE,
+  RAINBOW_PALETTE,
+  TAB10_PALETTE,
+  SET1_PALETTE,
+  SET2_PALETTE,
+  SET3_PALETTE,
+} from './controlDefaults';
 
 // initDefaults で渡された初期化パラメータを記憶（reset 時に再適用するため）
 let _initDims: { x: number; y: number; z: number } | null = null;
@@ -85,7 +96,8 @@ export const useControlStore = create<ControlStore>()(
     },
 
     resetColors: () => {
-      const colors = [...DEFAULT_CONTROL_STATE.customColors];
+      const colors = [...DEFAULT_PALETTE];
+      let profile: ColorProfile = 'hako';
       if (_initColormap) {
         Object.entries(_initColormap).forEach(([key, color]) => {
           const index = parseInt(key, 10);
@@ -95,8 +107,9 @@ export const useControlStore = create<ControlStore>()(
         });
       }
       zustandSet({
+        colorProfile: profile,
         customColors: colors,
-        valueVisibility: [...DEFAULT_CONTROL_STATE.valueVisibility],
+        valueVisibility: [...DEFAULT_VISIBILITY],
       });
     },
 
@@ -123,14 +136,65 @@ export const useControlStore = create<ControlStore>()(
       const current = zustandGet().customColors;
       const next = [...current];
       next[index] = color;
-      zustandSet({ customColors: next });
+      zustandSet({ customColors: next, colorProfile: 'custom' });
     },
 
     updateVisibility: (index: number, visible: boolean) => {
       const current = zustandGet().valueVisibility;
       const next = [...current];
       next[index] = visible;
-      zustandSet({ valueVisibility: next });
+      zustandSet({ valueVisibility: next, colorProfile: 'custom' });
+    },
+
+    setColorProfile: (profile: ColorProfile) => {
+      let nextColors = [...DEFAULT_PALETTE];
+      let nextVisibility = [...DEFAULT_VISIBILITY];
+
+      switch (profile) {
+        case 'hako':
+          nextColors = [...DEFAULT_PALETTE];
+          break;
+        case 'sem':
+          nextColors = [...SEM_PALETTE];
+          nextVisibility[0] = true; // SEMモードは 0 もデフォルト表示
+          break;
+        case 'grayscale':
+          nextColors = [...GRAYSCALE_PALETTE];
+          break;
+        case 'rainbow':
+          nextColors = [...RAINBOW_PALETTE];
+          break;
+        case 'tab10':
+          nextColors = [...TAB10_PALETTE];
+          break;
+        case 'set1':
+          nextColors = [...SET1_PALETTE];
+          break;
+        case 'set2':
+          nextColors = [...SET2_PALETTE];
+          break;
+        case 'set3':
+          nextColors = [...SET3_PALETTE];
+          break;
+        case 'custom':
+          // VSCode設定から渡された初期カラーマップ(カスタム設定)を復元
+          nextColors = [...DEFAULT_PALETTE];
+          if (_initColormap) {
+            Object.entries(_initColormap).forEach(([key, color]) => {
+              const index = parseInt(key, 10);
+              if (!isNaN(index) && index >= 0 && index < 16) {
+                nextColors[index] = color;
+              }
+            });
+          }
+          break;
+      }
+
+      zustandSet({
+        colorProfile: profile,
+        customColors: nextColors,
+        valueVisibility: nextVisibility,
+      });
     },
 
     setSlicePosition: (slice: 1 | 2, value: number) => {
@@ -157,10 +221,15 @@ export const useControlStore = create<ControlStore>()(
       }
     },
 
+    updateGlobalColormap: (colormap: Record<string, string>) => {
+      _initColormap = colormap;
+    },
+
     initDefaults: (
       dims: { x: number; y: number; z: number },
       maxDpr: number,
-      colormap?: Record<string, string>
+      colormap?: Record<string, string>,
+      colorProfile?: string
     ) => {
       // パラメータを記憶（reset 時に再利用）
       _initDims = dims;
@@ -168,6 +237,70 @@ export const useControlStore = create<ControlStore>()(
       if (colormap !== undefined) {
         _initColormap = colormap;
       }
+
+      // colormapが渡されている場合、customColorsの初期配列を作る
+      let initialCustomColors = [...DEFAULT_PALETTE];
+      if (colormap !== undefined && Object.keys(colormap).length > 0) {
+        Object.entries(colormap).forEach(([key, color]) => {
+          const index = parseInt(key, 10);
+          if (!isNaN(index) && index >= 0 && index < 16) {
+            initialCustomColors[index] = color;
+          }
+        });
+      }
+
+      let profileToSet: ColorProfile = 'hako';
+      if (colorProfile) {
+        profileToSet = colorProfile as ColorProfile;
+      }
+
+      zustandSet({
+        colorProfile: profileToSet,
+        customColors: initialCustomColors,
+      });
+
+      // そのプロファイル固有の変更（tab10 等のアクティベーション）はsetColorProfileと同じロジックを通すため、
+      // 便宜上一度同じアクションを呼ぶか、直接更新する
+      // ここでは zustandSet を使って、指定されたプロファイルによる書き換えを行う
+      let nextColors = initialCustomColors;
+      let nextVisibility = [...DEFAULT_VISIBILITY];
+
+      switch (profileToSet) {
+        case 'hako':
+          nextColors = [...DEFAULT_PALETTE];
+          break;
+        case 'sem':
+          nextColors = [...SEM_PALETTE];
+          // ID 0 を表示するように
+          nextVisibility[0] = true;
+          break;
+        case 'grayscale':
+          nextColors = [...GRAYSCALE_PALETTE];
+          break;
+        case 'rainbow':
+          nextColors = [...RAINBOW_PALETTE];
+          break;
+        case 'tab10':
+          nextColors = [...TAB10_PALETTE];
+          break;
+        case 'set1':
+          nextColors = [...SET1_PALETTE];
+          break;
+        case 'set2':
+          nextColors = [...SET2_PALETTE];
+          break;
+        case 'set3':
+          nextColors = [...SET3_PALETTE];
+          break;
+        case 'custom':
+          // custom の場合は上でマージした initialCustomColors をそのまま使う
+          break;
+      }
+
+      zustandSet({
+        customColors: nextColors,
+        valueVisibility: nextVisibility,
+      });
 
       zustandSet({
         voxelDims: { ...dims },
