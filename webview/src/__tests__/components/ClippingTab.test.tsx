@@ -45,7 +45,7 @@ describe('ClippingTab', () => {
     // スライス軸セレクト表示
     expect(screen.getByText('スライス軸')).toBeInTheDocument();
     // スライスポジションスライダー表示
-    expect(screen.getByText('スライス位置（開始）')).toBeInTheDocument();
+    expect(screen.getByText('スライス 1 (Z)')).toBeInTheDocument();
   });
 
   it('Custom モードに切り替えると、法線ベクトルと距離が表示される', () => {
