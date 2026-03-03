@@ -88,20 +88,20 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
       {/* 16個のカラーコントロール（0〜15）- グリッド配置 */}
       <div className="color-grid">
         {Array.from({ length: 16 }, (_, i) => {
-          // fraction計算: ID=0は全体に対する割合、ID=1-15は非空ボクセルに対する割合
+          // fraction: 非空ボクセルに対する割合、volume ratio: 全体に対する割合
           let fractionText = '';
           if (voxelStatistics) {
             const count = voxelStatistics.countByValue[i];
+            const volPct =
+              voxelStatistics.totalVoxels > 0 ? (count / voxelStatistics.totalVoxels) * 100 : 0;
             if (i === 0) {
-              const pct =
-                voxelStatistics.totalVoxels > 0 ? (count / voxelStatistics.totalVoxels) * 100 : 0;
-              fractionText = `${count.toLocaleString()} (${pct.toFixed(1)}%)`;
+              fractionText = `vol: ${volPct.toFixed(1)}%`;
             } else {
-              const pct =
+              const fracPct =
                 voxelStatistics.nonEmptyVoxels > 0
                   ? (count / voxelStatistics.nonEmptyVoxels) * 100
                   : 0;
-              fractionText = `${count.toLocaleString()} (${pct.toFixed(1)}%)`;
+              fractionText = `vol: ${volPct.toFixed(1)}% / frac: ${fracPct.toFixed(1)}%`;
             }
           }
 
