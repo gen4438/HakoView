@@ -29,6 +29,7 @@ uniform float uEdgeFadeEnd; // エッジフェード終了距離
 uniform mat4 uModelMatrixInverse;
 uniform float uValueVisibility[16]; // 各ボクセル値の表示フラグ (0.0=非表示, 1.0=表示)
 uniform float uIsOrthographic; // 0.0=perspective, 1.0=orthographic
+uniform float uOrthoScale; // OrthoカメラのfrustumHeight/canvasHeight補正値
 uniform sampler3D uOccupancyTexture; // Occupancy Grid (R8, 0=empty/255=occupied)
 uniform vec3 uOccupancyDimensions;   // Grid dimensions (ceil(shape/blockSize))
 uniform float uBlockSize;            // Block size (default 8)
@@ -60,7 +61,10 @@ vec3 applyEdgeHighlight(vec3 color, vec3 realPosition, vec3 normal) {
     vec2 edgeDists = absN.x > 0.5 ? distToEdge.yz :
                      absN.y > 0.5 ? distToEdge.xz : distToEdge.xy;
 
-    if (!any(lessThan(edgeDists, vec2(uEdgeThickness)))) return color;
+    // エッジ太さ: uEdgeThicknessはボクセルサイズに対する比率（perspective/ortho共通）
+    float effectiveThickness = uEdgeThickness;
+
+    if (!any(lessThan(edgeDists, vec2(effectiveThickness)))) return color;
 
     return mix(color, uEdgeColor, uEdgeIntensity * fade);
 }

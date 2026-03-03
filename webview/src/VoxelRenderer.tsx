@@ -28,6 +28,7 @@ import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
 import vertexShader from './shaders/voxel.vert';
 import fragmentShader from './shaders/voxel.frag';
 import { ScaleBar } from './components/ScaleBar';
+import { computeVoxelStatistics } from './utils/voxelStatistics';
 
 // カスタムシェーダーマテリアルを定義
 const VoxelShaderMaterial = shaderMaterial(
@@ -53,6 +54,7 @@ const VoxelShaderMaterial = shaderMaterial(
     uSliceZMin: 0.0,
     uSliceZMax: 0.0,
     uIsOrthographic: 0.0,
+    uOrthoScale: 0.0,
     uCameraDistance: 0.0,
     uOccupancyTexture: null,
     uOccupancyDimensions: new THREE.Vector3(1, 1, 1),
@@ -719,13 +721,18 @@ function VoxelMesh(props: VoxelMeshProps) {
 
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
 
   // 3Dテクスチャ作成
   const dataTexture = useMemo(() => {
     const { dimensions, values } = voxelData;
     // valuesが既にUint8Arrayの場合はそのまま使用、number[]の場合は変換
     const uint8Array = values instanceof Uint8Array ? values : new Uint8Array(values);
+
+    // ボクセル統計情報を計算してstoreに保存
+    const totalVoxels = dimensions.x * dimensions.y * dimensions.z;
+    const stats = computeVoxelStatistics(uint8Array, totalVoxels);
+    useControlStore.getState().setVoxelStatistics(stats);
 
     const texture = new THREE.Data3DTexture(uint8Array, dimensions.x, dimensions.y, dimensions.z);
 
@@ -938,9 +945,17 @@ function VoxelMesh(props: VoxelMeshProps) {
         .invert();
 
       // カメラタイプを設定
-      materialRef.current.uniforms.uIsOrthographic.value = (camera as any).isOrthographicCamera
-        ? 1.0
-        : 0.0;
+      const isOrtho = (camera as any).isOrthographicCamera;
+      materialRef.current.uniforms.uIsOrthographic.value = isOrtho ? 1.0 : 0.0;
+
+      // Ortho ViewのuOrthoScaleを設定
+      if (isOrtho) {
+        const orthoCamera = camera as THREE.OrthographicCamera;
+        const frustumHeight = orthoCamera.top - orthoCamera.bottom;
+        materialRef.current.uniforms.uOrthoScale.value = frustumHeight / gl.domElement.clientHeight;
+      } else {
+        materialRef.current.uniforms.uOrthoScale.value = 0.0;
+      }
 
       // カメラからの距離を計算
       if (camera) {

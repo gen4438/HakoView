@@ -288,3 +288,12 @@ pnpm run watch
 - **すべての仕様とドキュメントは日本語**（NFR-005）
 - ユーザー向けメッセージとエラーテキストは日本語にすべき
 - コードコメントは英語でも可、ただし機能ドキュメントは日本語必須
+
+## Active Technologies
+
+- TypeScript 5.x, GLSL ES 3.0 (WebGL2) + React 18, Three.js (react-three-fiber), Zustand (状態管理) (003-fix-ortho-grid-display)
+- N/A（ファイルベース、.leSファイル読み取り専用） (003-fix-ortho-grid-display)
+
+## Recent Changes
+
+- 003-fix-ortho-grid-display: Added TypeScript 5.x, GLSL ES 3.0 (WebGL2) + React 18, Three.js (react-three-fiber), Zustand (状態管理)
