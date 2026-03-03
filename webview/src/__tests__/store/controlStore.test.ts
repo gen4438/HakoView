@@ -147,13 +147,13 @@ describe('controlStore', () => {
       expect(useControlStore.getState().dpr).toBe(2.0);
     });
 
-    it('slicePosition2 を各次元サイズに設定する', () => {
+    it('slicePosition1 を各次元サイズに設定する', () => {
       const { initDefaults } = useControlStore.getState();
       initDefaults({ x: 10, y: 20, z: 30 }, 1.5);
       const state = useControlStore.getState();
-      expect(state.slicePosition2X).toBe(10);
-      expect(state.slicePosition2Y).toBe(20);
-      expect(state.slicePosition2Z).toBe(30);
+      expect(state.slicePosition1X).toBe(10);
+      expect(state.slicePosition1Y).toBe(20);
+      expect(state.slicePosition1Z).toBe(30);
     });
   });
 });
