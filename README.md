@@ -17,9 +17,39 @@
 
 ## 🚀 インストール
 
-最新のリリース版を [GitHub Release](https://github.com/gen4438/HakoView/releases) からダウンロードしてインストールできます。
+### ワンライナーインストール
 
-1. リリースページから VSIX ファイルをダウンロード
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gen4438/HakoView/main/scripts/install-latest.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/gen4438/HakoView/main/scripts/install-latest.ps1 | iex
+```
+
+プラットフォーム（`linux-x64`, `darwin-arm64`, `win32-x64`）は自動検出されます。
+
+### Remote SSH ホストへのインストール
+
+**方法 1: VS Code 統合ターミナルから**（推奨）
+
+VS Code から Remote SSH で接続した状態で、統合ターミナルから上記のワンライナーを実行してください。
+
+**方法 2: SSH 直接接続から**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gen4438/HakoView/main/scripts/install-latest.sh | bash -s -- --server
+```
+
+`--server` を指定すると、`~/.vscode-server/extensions/` に直接展開されます。リモートホストにローカル VS Code がインストールされていても、Remote SSH 用に正しくインストールされます。
+
+### 手動インストール
+
+1. [GitHub Releases](https://github.com/gen4438/HakoView/releases) からプラットフォームに合った VSIX ファイルをダウンロード
 2. VS Code で **Ctrl+Shift+X** / **Cmd+Shift+X** を押して拡張機能パネルを開く
 3. 「**...**」メニュー → 「**VSIX からインストール...**」を選択
 4. ダウンロードした VSIX ファイルを選択
