@@ -215,6 +215,89 @@ install_server() {
   mv "$work_dir/extension" "$target_dir"
   rm -rf "$work_dir"
 
+  # extensions.json にエントリを登録し .obsolete をクリーンアップ
+  # （VS Code Server が拡張機能を認識するために必要）
+  local extensions_json="${ext_dir}/extensions.json"
+  local obsolete_file="${ext_dir}/.obsolete"
+  local identifier="${publisher}.${name}"
+  local timestamp
+  timestamp=$(date +%s000)
+
+  if [[ -f "$extensions_json" ]]; then
+    # python3 > jq の優先順で JSON 操作ツールを選択
+    if command -v python3 &>/dev/null; then
+      python3 - "$extensions_json" "$obsolete_file" "$identifier" "$version" "$target_dir" "$ext_id" "$timestamp" "$name" <<'PYEOF'
+import json, sys, os
+ext_json_path, obsolete_path, identifier, version, target_dir, ext_id, timestamp, ext_name = sys.argv[1:]
+
+# extensions.json を更新
+with open(ext_json_path, "r") as f:
+    extensions = json.load(f)
+extensions = [e for e in extensions if not e.get("identifier", {}).get("id", "").endswith("." + ext_name)]
+extensions.append({
+    "identifier": {"id": identifier},
+    "version": version,
+    "location": {"$mid": 1, "fsPath": target_dir, "external": "file://" + target_dir, "path": target_dir, "scheme": "file"},
+    "relativeLocation": ext_id,
+    "metadata": {"isMachineScoped": True, "installedTimestamp": int(timestamp), "pinned": True, "source": "vsix"}
+})
+with open(ext_json_path, "w") as f:
+    json.dump(extensions, f, indent=2)
+
+# .obsolete をクリーンアップ
+if os.path.isfile(obsolete_path):
+    with open(obsolete_path, "r") as f:
+        obsolete = json.load(f)
+    obsolete = {k: v for k, v in obsolete.items() if "." + ext_name + "-" not in k}
+    with open(obsolete_path, "w") as f:
+        json.dump(obsolete, f, indent=2)
+PYEOF
+      echo "extensions.json を更新しました"
+
+    elif command -v jq &>/dev/null; then
+      local new_entry
+      new_entry=$(cat <<ENTRY
+{
+  "identifier": {"id": "${identifier}"},
+  "version": "${version}",
+  "location": {
+    "\$mid": 1,
+    "fsPath": "${target_dir}",
+    "external": "file://${target_dir}",
+    "path": "${target_dir}",
+    "scheme": "file"
+  },
+  "relativeLocation": "${ext_id}",
+  "metadata": {
+    "isMachineScoped": true,
+    "installedTimestamp": ${timestamp},
+    "pinned": true,
+    "source": "vsix"
+  }
+}
+ENTRY
+)
+      local updated
+      updated=$(jq --argjson entry "$new_entry" --arg name "$name" \
+        '[.[] | select(.identifier.id | test("\\." + $name + "$") | not)] + [$entry]' \
+        "$extensions_json")
+      echo "$updated" > "$extensions_json"
+
+      if [[ -f "$obsolete_file" ]]; then
+        local cleaned
+        cleaned=$(jq --arg name "$name" \
+          'to_entries | [.[] | select(.key | test("\\." + $name + "-") | not)] | from_entries' \
+          "$obsolete_file")
+        echo "$cleaned" > "$obsolete_file"
+      fi
+      echo "extensions.json を更新しました"
+
+    else
+      echo "警告: python3 も jq も見つかりません。extensions.json への登録をスキップします。" >&2
+      echo "VS Code の統合ターミナルから再インストールしてください。" >&2
+    fi
+  fi
+
   echo "インストール先: ${target_dir}"
   echo ""
   echo "注意: VS Code を再起動（またはウィンドウのリロード）すると拡張機能が有効になります。"
@@ -236,6 +319,23 @@ done
 if [[ -n "$TARGET" ]] && [[ "$TARGET" != "local" ]] && [[ "$TARGET" != "server" ]]; then
   echo "エラー: --target は 'local' または 'server' を指定してください" >&2
   exit 1
+fi
+
+# 統合ターミナル内で --server が指定された場合の警告
+if [[ "$TARGET" == "server" ]] && [[ -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
+  echo "警告: VS Code 統合ターミナル内では --server は不要です。" >&2
+  echo "統合ターミナルではオプションなしで実行すれば code CLI 経由で正しくインストールされます。" >&2
+  echo "--server は SSH 直接接続時のみ使用してください。" >&2
+  echo "" >&2
+  echo "続行しますか？ 5秒後に中断します。Ctrl+C で中断、Enter で続行..." >&2
+  if read -t 5 -r; then
+    echo "続行します..."
+  else
+    echo "" >&2
+    echo "中断しました。--server なしで再実行してください:" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/gen4438/HakoView/main/scripts/install-latest.sh | bash" >&2
+    exit 1
+  fi
 fi
 
 # Detect platform
