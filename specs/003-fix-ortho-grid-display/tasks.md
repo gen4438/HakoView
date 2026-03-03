@@ -19,8 +19,8 @@
 
 **Purpose**: 両ストーリーで共有する型定義の追加
 
-- [ ] T001 [P] VoxelStatistics型をwebview/src/store/controlTypes.tsに追加（interface定義、countByValue, totalVoxels, nonEmptyVoxels）
-- [ ] T002 [P] controlStoreにvoxelStatisticsフィールドとsetVoxelStatisticsアクションを追加: webview/src/store/controlDefaults.ts
+- [x] T001 [P] VoxelStatistics型をwebview/src/store/controlTypes.tsに追加（interface定義、countByValue, totalVoxels, nonEmptyVoxels）
+- [x] T002 [P] controlStoreにvoxelStatisticsフィールドとsetVoxelStatisticsアクションを追加: webview/src/store/controlDefaults.ts
 - [ ] T003 コミット: 「feat: VoxelStatistics型とstore拡張を追加」
 
 **Checkpoint**: 型定義が完了し、両ストーリーの実装に進める状態
@@ -35,15 +35,15 @@
 
 ### テスト
 
-- [ ] T004 [US1] 統計計算のユニットテストを作成: webview/src/utils/voxelStatistics.test.ts（全ID同一、空データ、混合データ、値16以上のマッピング）
+- [x] T004 [US1] 統計計算のユニットテストを作成: webview/src/**tests**/utils/voxelStatistics.test.ts（全ID同一、空データ、混合データ、値16以上のマッピング）
 
 ### 実装
 
-- [ ] T005 [US1] computeVoxelStatistics関数を実装: webview/src/utils/voxelStatistics.ts（Uint8Arrayから各ID 0-15のカウント、16以上は(value-1)%15+1でマッピング）
-- [ ] T006 [US1] テスト実行して全テストがパスすることを確認（pnpm run test）
-- [ ] T007 [US1] ボクセルデータ受信時にcomputeVoxelStatisticsを呼び出しsetVoxelStatisticsでstoreに保存するロジックを追加（VoxelRenderer.tsxまたはデータ受信ハンドラ内）
-- [ ] T008 [US1] ColorsTabにfraction表示UIを追加: webview/src/components/tabs/ColorsTab.tsx（各ColorControlの横にボクセル数と割合%を小数点1桁で表示、ID=0は全体に対する割合、ID=1-15は非空ボクセルに対する割合）
-- [ ] T009 [US1] 型チェックとLint実行（pnpm run check-types && pnpm run lint）
+- [x] T005 [US1] computeVoxelStatistics関数を実装: webview/src/utils/voxelStatistics.ts（Uint8Arrayから各ID 0-15のカウント、16以上は(value-1)%15+1でマッピング）
+- [x] T006 [US1] テスト実行して全テストがパスすることを確認（pnpm run test）
+- [x] T007 [US1] ボクセルデータ受信時にcomputeVoxelStatisticsを呼び出しsetVoxelStatisticsでstoreに保存するロジックを追加（VoxelRenderer.tsxのdataTexture useMemo内）
+- [x] T008 [US1] ColorsTabにfraction表示UIを追加: webview/src/components/tabs/ColorsTab.tsx（各ColorControlの横にボクセル数と割合%を小数点1桁で表示、ID=0は全体に対する割合、ID=1-15は非空ボクセルに対する割合）
+- [x] T009 [US1] 型チェックとLint実行（pnpm run check-types && pnpm run lint）
 - [ ] T010 コミット: 「feat: カラータブに各ボクセルIDのfraction表示を追加」
 
 **Checkpoint**: .leSファイルを開いてカラータブで各IDの個数と割合が確認できる状態
@@ -58,10 +58,10 @@
 
 ### 実装
 
-- [ ] T011 [P] [US2] voxel.fragにuniform float uOrthoScaleを追加し、applyEdgeHighlight関数内でOrtho View時にエッジ太さをuOrthoScaleで補正するロジックを実装: webview/src/shaders/voxel.frag
-- [ ] T012 [P] [US2] VoxelRenderer.tsxのShaderMaterial初期化にuOrthoScale: 0.0を追加し、useFrame内でOrthoカメラ時にfrustumHeight/canvasHeightを計算してuOrthoScaleに設定: webview/src/VoxelRenderer.tsx
+- [x] T011 [P] [US2] voxel.fragにuniform float uOrthoScaleを追加し、applyEdgeHighlight関数内でOrtho View時にエッジ太さをuOrthoScaleで補正するロジックを実装: webview/src/shaders/voxel.frag
+- [x] T012 [P] [US2] VoxelRenderer.tsxのShaderMaterial初期化にuOrthoScale: 0.0を追加し、useFrame内でOrthoカメラ時にfrustumHeight/canvasHeightを計算してuOrthoScaleに設定: webview/src/VoxelRenderer.tsx
 - [ ] T013 [US2] Perspective Viewのエッジ動作が既存のまま維持されていることを確認（手動テスト: 距離ベースフェードが正常動作）
-- [ ] T014 [US2] 型チェックとLint実行（pnpm run check-types && pnpm run lint）
+- [x] T014 [US2] 型チェックとLint実行（pnpm run check-types && pnpm run lint）
 - [ ] T015 コミット: 「fix: Ortho Viewのエッジハイライト歯抜け問題を修正」
 
 **Checkpoint**: Ortho Viewでエッジが等間隔で均一に表示され、Perspective Viewの動作に影響がない状態
@@ -72,8 +72,8 @@
 
 **Purpose**: 全体の品質確認と最終調整
 
-- [ ] T016 プロダクションビルドが成功することを確認（pnpm run build:prod）
-- [ ] T017 全テスト実行（pnpm run test）
+- [x] T016 プロダクションビルドが成功することを確認（pnpm run build:prod）
+- [x] T017 全テスト実行（pnpm run test）
 - [ ] T018 手動統合テスト: .leSファイルを開き、Fraction表示とエッジ修正の両方が正常動作することを確認
 - [ ] T019 コミット: 「chore: ビルドとテストの最終確認」（変更がある場合のみ）
 

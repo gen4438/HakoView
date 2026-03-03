@@ -125,7 +125,7 @@
 /* --- カラーコントロール --- */
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 4px;
   padding: 4px 8px;
 }
@@ -157,6 +157,24 @@
   font-size: 10px;
   color: var(--vscode-descriptionForeground, #999);
   user-select: none;
+}
+
+.color-cell-with-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.color-fraction-label {
+  font-size: 9px;
+  color: var(--vscode-descriptionForeground, #999);
+  white-space: nowrap;
+  user-select: none;
+  padding-left: 16px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .color-visibility-checkbox {

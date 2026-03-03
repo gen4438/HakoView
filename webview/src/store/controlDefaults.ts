@@ -216,4 +216,6 @@ export const DEFAULT_CONTROL_STATE: ControlState = {
   colorProfile: 'hako',
   customColors: DEFAULT_PALETTE,
   valueVisibility: DEFAULT_VISIBILITY,
+  // Statistics
+  voxelStatistics: null,
 };
