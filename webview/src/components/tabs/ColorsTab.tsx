@@ -31,6 +31,7 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
   const valueVisibility = useControlStore((s) => s.valueVisibility);
   const updateColor = useControlStore((s) => s.updateColor);
   const updateVisibility = useControlStore((s) => s.updateVisibility);
+  const voxelStatistics = useControlStore((s) => s.voxelStatistics);
 
   const handleCopyColors = () => {
     if (onCopyColors) {
@@ -86,28 +87,49 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
 
       {/* 16個のカラーコントロール（0〜15）- グリッド配置 */}
       <div className="color-grid">
-        {Array.from({ length: 16 }, (_, i) => (
-          <ColorControl
-            key={i}
-            label={`${i}`}
-            value={customColors[i] ?? '#000000'}
-            onChange={(color) => {
-              const wasCustom = useControlStore.getState().colorProfile === 'custom';
-              updateColor(i, color);
+        {Array.from({ length: 16 }, (_, i) => {
+          // fraction計算: ID=0は全体に対する割合、ID=1-15は非空ボクセルに対する割合
+          let fractionText = '';
+          if (voxelStatistics) {
+            const count = voxelStatistics.countByValue[i];
+            if (i === 0) {
+              const pct =
+                voxelStatistics.totalVoxels > 0 ? (count / voxelStatistics.totalVoxels) * 100 : 0;
+              fractionText = `${count.toLocaleString()} (${pct.toFixed(1)}%)`;
+            } else {
+              const pct =
+                voxelStatistics.nonEmptyVoxels > 0
+                  ? (count / voxelStatistics.nonEmptyVoxels) * 100
+                  : 0;
+              fractionText = `${count.toLocaleString()} (${pct.toFixed(1)}%)`;
+            }
+          }
 
-              if (wasCustom && onSaveColorSettings) {
-                const colormap: Record<string, string> = {};
-                useControlStore.getState().customColors.forEach((c, idx) => {
-                  colormap[idx.toString()] = c;
-                });
-                onSaveColorSettings(colormap, 'custom');
-              }
-            }}
-            showVisibility={true}
-            visible={valueVisibility[i] ?? i !== 0}
-            onVisibilityChange={(visible) => updateVisibility(i, visible)}
-          />
-        ))}
+          return (
+            <div key={i} className="color-cell-with-stats">
+              <ColorControl
+                label={`${i}`}
+                value={customColors[i] ?? '#000000'}
+                onChange={(color) => {
+                  const wasCustom = useControlStore.getState().colorProfile === 'custom';
+                  updateColor(i, color);
+
+                  if (wasCustom && onSaveColorSettings) {
+                    const colormap: Record<string, string> = {};
+                    useControlStore.getState().customColors.forEach((c, idx) => {
+                      colormap[idx.toString()] = c;
+                    });
+                    onSaveColorSettings(colormap, 'custom');
+                  }
+                }}
+                showVisibility={true}
+                visible={valueVisibility[i] ?? i !== 0}
+                onVisibilityChange={(visible) => updateVisibility(i, visible)}
+              />
+              {fractionText && <span className="color-fraction-label">{fractionText}</span>}
+            </div>
+          );
+        })}
       </div>
       {/* カラータブのリセット */}
       <div

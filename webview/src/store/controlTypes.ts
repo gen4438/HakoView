@@ -1,3 +1,13 @@
+/** ボクセル統計情報 */
+export interface VoxelStatistics {
+  /** 各ID（0-15）のボクセル数 */
+  countByValue: number[];
+  /** 全ボクセル数（X × Y × Z） */
+  totalVoxels: number;
+  /** 非空ボクセル数（ID ≠ 0） */
+  nonEmptyVoxels: number;
+}
+
 /** クリッピングモード */
 export type ClippingMode = 'Off' | 'Slice' | 'Custom';
 
@@ -80,6 +90,9 @@ export interface ControlState {
   colorProfile: ColorProfile; // 現在のカラープロファイル
   customColors: string[]; // length 16, hex color strings
   valueVisibility: boolean[]; // length 16
+
+  // ---- Statistics ----
+  voxelStatistics: VoxelStatistics | null;
 }
 
 /**
@@ -107,6 +120,8 @@ export interface ControlActions {
   updateVisibility: (index: number, visible: boolean) => void;
   /** カラープロファイルを変更 */
   setColorProfile: (profile: ColorProfile) => void;
+  /** ボクセル統計情報を設定 */
+  setVoxelStatistics: (stats: VoxelStatistics) => void;
   /** アクティブスライスの位置を更新 */
   setSlicePosition: (slice: 1 | 2, value: number) => void;
   /** カスタムカラーマップのグローバル設定を更新 */

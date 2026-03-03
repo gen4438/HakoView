@@ -29,6 +29,7 @@
     "@types/vscode-webview": "^1.57.5",
     "jsdom": "^26.0.0",
     "typescript": "^5.9.3",
+    "vite": "^6.4.1",
     "vitest": "^3.0.0"
   }
 }

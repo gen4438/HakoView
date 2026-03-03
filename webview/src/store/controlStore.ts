@@ -197,6 +197,10 @@ export const useControlStore = create<ControlStore>()(
       });
     },
 
+    setVoxelStatistics: (stats) => {
+      zustandSet({ voxelStatistics: stats });
+    },
+
     setSlicePosition: (slice: 1 | 2, value: number) => {
       const { sliceAxis } = zustandGet();
       if (sliceAxis === 'X') {
