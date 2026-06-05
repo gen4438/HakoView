@@ -110,18 +110,7 @@ export const ColorsTab: React.FC<ColorsTabProps> = ({
               <ColorControl
                 label={`${i}`}
                 value={customColors[i] ?? '#000000'}
-                onChange={(color) => {
-                  const wasCustom = useControlStore.getState().colorProfile === 'custom';
-                  updateColor(i, color);
-
-                  if (wasCustom && onSaveColorSettings) {
-                    const colormap: Record<string, string> = {};
-                    useControlStore.getState().customColors.forEach((c, idx) => {
-                      colormap[idx.toString()] = c;
-                    });
-                    onSaveColorSettings(colormap, 'custom');
-                  }
-                }}
+                onChange={(color) => updateColor(i, color)}
                 showVisibility={true}
                 visible={valueVisibility[i] ?? i !== 0}
                 onVisibilityChange={(visible) => updateVisibility(i, visible)}
