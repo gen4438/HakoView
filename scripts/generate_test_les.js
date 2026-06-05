@@ -284,6 +284,51 @@ function createCheckerboardPattern(X, Y, Z, blockSize = 16) {
 }
 
 /**
+ * 固定サイズブロックで塗り分けたボクセルデータを生成
+ *
+ * @param {number} X - X方向のボクセル数
+ * @param {number} Y - Y方向のボクセル数
+ * @param {number} Z - Z方向のボクセル数
+ * @param {number} blockSize - ブロックサイズ（各軸共通）
+ * @returns {Uint8Array}
+ */
+function createUniformBlocks(X, Y, Z, blockSize = 50) {
+  const data = new Uint8Array(X * Y * Z);
+
+  let materialId = 1;
+  const xBlocks = Math.ceil(X / blockSize);
+  const yBlocks = Math.ceil(Y / blockSize);
+  const zBlocks = Math.ceil(Z / blockSize);
+
+  for (let bx = 0; bx < xBlocks; bx++) {
+    for (let by = 0; by < yBlocks; by++) {
+      for (let bz = 0; bz < zBlocks; bz++) {
+        const xStart = bx * blockSize;
+        const xEnd = Math.min(X, xStart + blockSize);
+        const yStart = by * blockSize;
+        const yEnd = Math.min(Y, yStart + blockSize);
+        const zStart = bz * blockSize;
+        const zEnd = Math.min(Z, zStart + blockSize);
+
+        for (let x = xStart; x < xEnd; x++) {
+          for (let y = yStart; y < yEnd; y++) {
+            for (let z = zStart; z < zEnd; z++) {
+              const idx = index3Dto1D(x, y, z, X, Y, Z);
+              data[idx] = materialId;
+            }
+          }
+        }
+
+        // マテリアルIDを循環（1-16）
+        materialId = (materialId % 16) + 1;
+      }
+    }
+  }
+
+  return data;
+}
+
+/**
  * テストファイルを生成
  */
 async function main() {
@@ -440,6 +485,20 @@ async function main() {
   );
   console.log();
 
+  // 10. 250x250x1000 固定ブロック
+  console.log('16. 250×250×1000矩形（50×50×50ブロック塗り分け）');
+  data = createUniformBlocks(250, 250, 1000, 50);
+  await writeLesFile(
+    path.join(baseDir, 'rect_250x250x1000_blocks50.leS.gz'),
+    data,
+    250,
+    250,
+    1000,
+    1e-9,
+    true
+  );
+  console.log();
+
   console.log('=== 生成完了 ===');
   console.log(`ファイル出力先: ${baseDir}`);
 }
@@ -454,4 +513,5 @@ module.exports = {
   createSpatialRegions,
   createGradientPattern,
   createCheckerboardPattern,
+  createUniformBlocks,
 };

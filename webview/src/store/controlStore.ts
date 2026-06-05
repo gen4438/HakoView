@@ -34,11 +34,14 @@ export const useControlStore = create<ControlStore>()(
     },
 
     reset: () => {
+      // ボクセル統計情報はモデル由来のデータなので、設定リセットでは保持する
+      const currentStats = zustandGet().voxelStatistics;
       // デフォルト値にリセット
       zustandSet({
         ...DEFAULT_CONTROL_STATE,
         customColors: [...DEFAULT_CONTROL_STATE.customColors],
         valueVisibility: [...DEFAULT_CONTROL_STATE.valueVisibility],
+        voxelStatistics: currentStats,
       });
       // initDefaults で渡された dims/maxDpr を再適用
       if (_initDims) {
