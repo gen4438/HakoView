@@ -574,10 +574,16 @@ function CaptureHelper({
         // サイズ指定なしの場合は現在のサイズでキャプチャ
         // frameloop="demand"モードではinvalidate()で描画を要求し、
         // 描画完了後にキャプチャする
+        // RenderThrottle が有効な場合、直近の throttle で描画スキップされると
+        // 古い画像が出力されるため、キャプチャ中は throttle をバイパスする
+        const throttle = getRenderThrottle(gl);
+        if (throttle) throttle.bypass = true;
         invalidate();
         return new Promise<string>((resolve) => {
           requestAnimationFrame(() => {
-            resolve(gl.domElement.toDataURL('image/png'));
+            const dataUrl = gl.domElement.toDataURL('image/png');
+            if (throttle) throttle.bypass = false;
+            resolve(dataUrl);
           });
         });
       }
@@ -1054,6 +1060,61 @@ function VisibilityManager({ isVisible }: { isVisible: boolean }) {
     }
     prevRef.current = isVisible;
   }, [isVisible, invalidate]);
+
+  return null;
+}
+
+/**
+ * gl.render を目標 FPS で上限制限する。
+ *
+ * VS Code がエディタグループ間で webview iframe を re-parent すると、
+ * Chromium 側で requestAnimationFrame が約2倍の頻度で発火することがある。
+ * frameloop="demand" + TrackballControls のダンピングのように invalidate()
+ * 連鎖でフレームを進めるパスではこれが描画回数の倍化として現れるため、
+ * gl.render 側で上限を設けて GPU 仕事量の倍化を防ぐ。
+ *
+ * useFrame 自体(controls.update 等)は通常通り走らせるので、ダンピングの
+ * 物理挙動は維持される。
+ *
+ * captureImage 等で確実に最新フレームを書き出したい場合は throttleRef.bypass
+ * を true にしてからレンダリングし、完了後に false に戻す。
+ */
+const RENDER_THROTTLE_KEY = '__hakoviewRenderThrottle';
+type RenderThrottleState = { bypass: boolean; lastTime: number };
+
+function getRenderThrottle(gl: THREE.WebGLRenderer): RenderThrottleState | undefined {
+  return (gl as unknown as Record<string, RenderThrottleState | undefined>)[RENDER_THROTTLE_KEY];
+}
+
+function RenderThrottle({ maxFps = 60 }: { maxFps?: number }) {
+  const gl = useThree((s) => s.gl);
+
+  useEffect(() => {
+    const minInterval = 1000 / maxFps;
+    const state: RenderThrottleState = { bypass: false, lastTime: -Infinity };
+    const originalRender = gl.render.bind(gl);
+
+    (gl as unknown as Record<string, RenderThrottleState>)[RENDER_THROTTLE_KEY] = state;
+
+    gl.render = function throttledRender(scene: THREE.Scene, camera: THREE.Camera) {
+      if (!state.bypass) {
+        const now = performance.now();
+        // 0.9 で少し余裕を持たせる(rAF タイミングのジッタ吸収)
+        if (now - state.lastTime < minInterval * 0.9) {
+          return;
+        }
+        state.lastTime = now;
+      }
+      originalRender(scene, camera);
+    };
+
+    return () => {
+      gl.render = originalRender;
+      delete (gl as unknown as Record<string, RenderThrottleState | undefined>)[
+        RENDER_THROTTLE_KEY
+      ];
+    };
+  }, [gl, maxFps]);
 
   return null;
 }
@@ -2285,6 +2346,7 @@ export const VoxelRenderer = forwardRef<VoxelRendererRef, VoxelRendererProps>(
           frameloop={isVisible ? 'demand' : 'never'}
         >
           <VisibilityManager isVisible={isVisible} />
+          <RenderThrottle />
           <StoreInvalidator />
           {usePerspective ? (
             <PerspectiveCamera
