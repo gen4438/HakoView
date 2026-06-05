@@ -21,7 +21,7 @@ export function useExtensionMessage() {
   const [settings, setSettings] = useState<ViewerSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isActive, setIsActive] = useState<boolean>(true);
+  const [isVisible, setIsVisible] = useState<boolean>(true);
   const loadStartRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -65,7 +65,9 @@ export function useExtensionMessage() {
           break;
 
         case 'viewStateChanged':
-          setIsActive(message.active);
+          // visible は split-view で複数タブが同時に見える状態を正しく扱うために使う
+          // (active はフォーカス基準で、複数同時可視のケースを扱えない)
+          setIsVisible(message.visible);
           break;
       }
     };
@@ -215,7 +217,7 @@ export function useExtensionMessage() {
     settings,
     error,
     isLoading,
-    isActive,
+    isVisible,
     loadFile,
     loadFileFromPath,
     saveState,
