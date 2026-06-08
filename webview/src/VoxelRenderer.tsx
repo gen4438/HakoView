@@ -27,6 +27,8 @@ import * as THREE from 'three';
 import type { VoxelDataMessage, ViewerSettings } from './types/voxel';
 import vertexShader from './shaders/voxel.vert';
 import fragmentShader from './shaders/voxel.frag';
+import smoothVertexShader from './shaders/smooth.vert';
+import smoothFragmentShader from './shaders/smooth.frag';
 import { ScaleBar } from './components/ScaleBar';
 import { computeVoxelStatistics } from './utils/voxelStatistics';
 
@@ -72,14 +74,53 @@ const VoxelShaderMaterial = shaderMaterial(
   fragmentShader
 );
 
+// スムース表示用シェーダーマテリアル (raymarch + 8近傍トライリニア argmax)
+const SmoothVoxelShaderMaterial = shaderMaterial(
+  {
+    uVoxelShape: new THREE.Vector3(1, 1, 1),
+    uAlpha: 1.0,
+    uLightIntensity: 1.0,
+    uAmbientIntensity: 0.2,
+    uTexture: null,
+    uPaletteTexture: null,
+    uPaletteSize: 16,
+    uModelMatrixInverse: new THREE.Matrix4(),
+    uClippingPlane: new THREE.Vector4(0, 1, 0, 0),
+    uEnableClipping: 0.0,
+    uClippingMode: 0.0,
+    uSliceXMin: 0.0,
+    uSliceXMax: 0.0,
+    uSliceYMin: 0.0,
+    uSliceYMax: 0.0,
+    uSliceZMin: 0.0,
+    uSliceZMax: 0.0,
+    uIsOrthographic: 0.0,
+    uOccupancyTexture: null,
+    uOccupancyDimensions: new THREE.Vector3(1, 1, 1),
+    uBlockSize: 8.0,
+    uUseOccupancy: 0.0,
+    uEnableEdgeHighlight: 1.0,
+    uEdgeColor: new THREE.Color('#ffffff'),
+    uEdgeIntensity: 1.0,
+    uEdgeFadeStart: 0,
+    uEdgeFadeEnd: 100,
+    uSmoothStepSize: 0.5,
+    uSmoothRefineIterations: 4,
+    uSmoothOccupancyTexture: null,
+  },
+  smoothVertexShader,
+  smoothFragmentShader
+);
+
 // React Three FiberでJSXとして使えるように拡張
-extend({ VoxelShaderMaterial });
+extend({ VoxelShaderMaterial, SmoothVoxelShaderMaterial });
 
 // TypeScript用の型宣言
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       voxelShaderMaterial: any;
+      smoothVoxelShaderMaterial: any;
     }
   }
 }
@@ -727,7 +768,28 @@ function VoxelMesh(props: VoxelMeshProps) {
 
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const { camera, gl } = useThree();
+  const { camera, gl, invalidate } = useThree();
+
+  // スムース表示モード (boxレイマーチ <-> smoothレイマーチ切り替え)
+  const smoothMode = useControlStore((s) => s.smoothMode);
+
+  // カメラ操作中かどうかを判定する ref (adaptive quality 用)
+  const lastCamRef = useRef({
+    pos: new THREE.Vector3(NaN, NaN, NaN),
+    quat: new THREE.Quaternion(),
+    zoom: NaN,
+  });
+  const isMovingRef = useRef(false);
+  const settleTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (settleTimeoutRef.current !== null) {
+        window.clearTimeout(settleTimeoutRef.current);
+        settleTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 3Dテクスチャ作成
   const dataTexture = useMemo(() => {
@@ -859,12 +921,112 @@ function VoxelMesh(props: VoxelMeshProps) {
     return { texture, dimensions: new THREE.Vector3(occX, occY, occZ), blockSize };
   }, [blockMaskData, valueVisibility]);
 
+  // スムース表示用のガウシアン平滑化占有テクスチャ
+  // valueVisibility に応じた 2値占有 (1.0 = 可視ボクセル、0.0 = それ以外) を
+  // 分離型 3D ガウシアン (radius=2, sigma≈1.2) で畳み込み、R8 Trilinear テクスチャに焼く。
+  // smoothMode が有効なときのみ計算する (大きいモデルでは数 100ms 級の CPU コスト)。
+  const smoothOccupancyTexture = useMemo(() => {
+    if (!smoothMode) return null;
+    const { dimensions, values } = voxelData;
+    const nx = dimensions.x;
+    const ny = dimensions.y;
+    const nz = dimensions.z;
+    const size = nx * ny * nz;
+    const raw = values instanceof Uint8Array ? values : new Uint8Array(values);
+
+    // 可視マスク (palette index 0-15)
+    const visMask = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) visMask[i] = valueVisibility[i] ? 1 : 0;
+
+    const src = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      const val = raw[i];
+      if (val !== undefined && val > 0) {
+        const pIdx = ((val - 1) % 15) + 1;
+        if (visMask[pIdx] === 1) src[i] = 1.0;
+      }
+    }
+
+    // K = exp(-d²/(2*1.2²)) を正規化 (sum=1)。 d=0:1.0 d=±1:0.7066 d=±2:0.2494
+    const K = [0.0856, 0.2426, 0.3434, 0.2426, 0.0856];
+    const radius = 2;
+    const tmp1 = new Float32Array(size);
+    const tmp2 = new Float32Array(size);
+
+    // X方向
+    for (let z = 0; z < nz; z++) {
+      const zOff = z * ny * nx;
+      for (let y = 0; y < ny; y++) {
+        const yOff = zOff + y * nx;
+        for (let x = 0; x < nx; x++) {
+          let sum = 0;
+          for (let dx = -radius; dx <= radius; dx++) {
+            const sx = x + dx < 0 ? 0 : x + dx >= nx ? nx - 1 : x + dx;
+            sum += src[yOff + sx] * K[dx + radius];
+          }
+          tmp1[yOff + x] = sum;
+        }
+      }
+    }
+
+    // Y方向
+    for (let z = 0; z < nz; z++) {
+      const zOff = z * ny * nx;
+      for (let y = 0; y < ny; y++) {
+        const yOff = zOff + y * nx;
+        for (let x = 0; x < nx; x++) {
+          let sum = 0;
+          for (let dy = -radius; dy <= radius; dy++) {
+            const sy = y + dy < 0 ? 0 : y + dy >= ny ? ny - 1 : y + dy;
+            sum += tmp1[zOff + sy * nx + x] * K[dy + radius];
+          }
+          tmp2[yOff + x] = sum;
+        }
+      }
+    }
+
+    // Z方向 → uint8 [0,255]
+    const dst = new Uint8Array(size);
+    for (let z = 0; z < nz; z++) {
+      const zOff = z * ny * nx;
+      for (let y = 0; y < ny; y++) {
+        const yOff = zOff + y * nx;
+        for (let x = 0; x < nx; x++) {
+          let sum = 0;
+          for (let dz = -radius; dz <= radius; dz++) {
+            const sz = z + dz < 0 ? 0 : z + dz >= nz ? nz - 1 : z + dz;
+            sum += tmp2[sz * ny * nx + y * nx + x] * K[dz + radius];
+          }
+          dst[yOff + x] = Math.max(0, Math.min(255, Math.round(sum * 255)));
+        }
+      }
+    }
+
+    const texture = new THREE.Data3DTexture(dst, nx, ny, nz);
+    texture.format = THREE.RedFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.wrapR = THREE.ClampToEdgeWrapping;
+    texture.unpackAlignment = 1;
+    texture.needsUpdate = true;
+    return texture;
+  }, [voxelData, valueVisibility, smoothMode]);
+
   // テクスチャの破棄（GPUメモリリーク防止）
   useEffect(() => {
     return () => {
       dataTexture.dispose();
     };
   }, [dataTexture]);
+
+  useEffect(() => {
+    return () => {
+      if (smoothOccupancyTexture) smoothOccupancyTexture.dispose();
+    };
+  }, [smoothOccupancyTexture]);
 
   useEffect(() => {
     return () => {
@@ -879,19 +1041,23 @@ function VoxelMesh(props: VoxelMeshProps) {
   }, [occupancyData]);
 
   // 初期化: voxelDataとテクスチャをuniformsに設定
+  // smoothMode 切替時はマテリアル自体が差し替わるため再初期化する。
   useEffect(() => {
     if (!materialRef.current) return;
     const u = materialRef.current.uniforms;
 
     u.uVoxelShape.value.set(voxelData.dimensions.x, voxelData.dimensions.y, voxelData.dimensions.z);
-    u.uVoxelLength.value = voxelData.voxelLength;
+    if (u.uVoxelLength) u.uVoxelLength.value = voxelData.voxelLength;
     u.uTexture.value = dataTexture;
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
     u.uOccupancyTexture.value = occupancyData.texture;
     u.uOccupancyDimensions.value.copy(occupancyData.dimensions);
     u.uBlockSize.value = occupancyData.blockSize;
-  }, [voxelData, dataTexture, paletteTexture, occupancyData]);
+    if (u.uSmoothOccupancyTexture) {
+      u.uSmoothOccupancyTexture.value = smoothOccupancyTexture;
+    }
+  }, [voxelData, dataTexture, paletteTexture, occupancyData, smoothOccupancyTexture, smoothMode]);
 
   // クリッピング（親から計算されたプロップ）とパレットテクスチャのみ useEffect で更新
   useEffect(() => {
@@ -924,7 +1090,7 @@ function VoxelMesh(props: VoxelMeshProps) {
     // パレットテクスチャを更新
     u.uPaletteTexture.value = paletteTexture;
     u.uPaletteSize.value = 16;
-  }, [clippingPlane, enableClipping, paletteTexture]);
+  }, [clippingPlane, enableClipping, paletteTexture, smoothMode]);
 
   // フレームごとに変わる値のみuseFrameで更新
   useFrame(() => {
@@ -937,13 +1103,15 @@ function VoxelMesh(props: VoxelMeshProps) {
       u.uLightIntensity.value = s.lightIntensity;
       u.uAmbientIntensity.value = s.ambientIntensity;
       u.uEnableEdgeHighlight.value = s.enableEdgeHighlight ? 1.0 : 0.0;
-      u.uEdgeThickness.value = s.edgeThickness;
+      if (u.uEdgeThickness) u.uEdgeThickness.value = s.edgeThickness;
       u.uEdgeColor.value.set(s.edgeColor);
       u.uEdgeIntensity.value = s.edgeIntensity;
       u.uEdgeFadeStart.value = 0;
       u.uEdgeFadeEnd.value = s.edgeMaxDistance;
       u.uUseOccupancy.value = s.useOccupancy ? 1.0 : 0.0;
-      u.uValueVisibility.value = s.valueVisibility.map((v) => (v ? 1.0 : 0.0));
+      if (u.uValueVisibility) {
+        u.uValueVisibility.value = s.valueVisibility.map((v) => (v ? 1.0 : 0.0));
+      }
 
       // フレームごとに逆行列を更新
       materialRef.current.uniforms.uModelMatrixInverse.value
@@ -954,19 +1122,55 @@ function VoxelMesh(props: VoxelMeshProps) {
       const isOrtho = (camera as any).isOrthographicCamera;
       materialRef.current.uniforms.uIsOrthographic.value = isOrtho ? 1.0 : 0.0;
 
-      // Ortho ViewのuOrthoScaleを設定
-      if (isOrtho) {
-        const orthoCamera = camera as THREE.OrthographicCamera;
-        const frustumHeight = orthoCamera.top - orthoCamera.bottom;
-        materialRef.current.uniforms.uOrthoScale.value = frustumHeight / gl.domElement.clientHeight;
-      } else {
-        materialRef.current.uniforms.uOrthoScale.value = 0.0;
+      // Ortho ViewのuOrthoScaleを設定 (box シェーダのみ持つ uniform)
+      if (u.uOrthoScale) {
+        if (isOrtho) {
+          const orthoCamera = camera as THREE.OrthographicCamera;
+          const frustumHeight = orthoCamera.top - orthoCamera.bottom;
+          u.uOrthoScale.value = frustumHeight / gl.domElement.clientHeight;
+        } else {
+          u.uOrthoScale.value = 0.0;
+        }
       }
 
-      // カメラからの距離を計算
-      if (camera) {
+      // カメラからの距離を計算 (box シェーダのみ持つ uniform)
+      if (camera && u.uCameraDistance) {
         const distance = camera.position.distanceTo(meshRef.current.position);
-        materialRef.current.uniforms.uCameraDistance.value = distance;
+        u.uCameraDistance.value = distance;
+      }
+
+      // スムース表示モード時のみ: ステップ幅と境界二分探索回数を更新。
+      // カメラ操作中は粗め (smoothMovingStepSize / smoothMovingRefineIterations)、
+      // 停止後 200ms 経過したら細かめ (smoothStepSize / smoothRefineIterations)。
+      if (s.smoothMode && u.uSmoothStepSize) {
+        const orthoZoom = isOrtho ? (camera as THREE.OrthographicCamera).zoom : 1;
+        const last = lastCamRef.current;
+        const posChanged =
+          !Number.isFinite(last.pos.x) || last.pos.distanceToSquared(camera.position) > 1e-10;
+        const quatChanged = last.quat.angleTo(camera.quaternion) > 1e-5;
+        const zoomChanged = !Number.isFinite(last.zoom) || Math.abs(orthoZoom - last.zoom) > 1e-5;
+        const moving = posChanged || quatChanged || zoomChanged;
+
+        if (moving) {
+          last.pos.copy(camera.position);
+          last.quat.copy(camera.quaternion);
+          last.zoom = orthoZoom;
+          isMovingRef.current = true;
+          u.uSmoothStepSize.value = s.smoothMovingStepSize;
+          u.uSmoothRefineIterations.value = Math.max(1, Math.round(s.smoothMovingRefineIterations));
+          if (settleTimeoutRef.current !== null) {
+            window.clearTimeout(settleTimeoutRef.current);
+          }
+          // 停止検知後、最後に細かい品質で 1 フレーム描画する
+          settleTimeoutRef.current = window.setTimeout(() => {
+            settleTimeoutRef.current = null;
+            isMovingRef.current = false;
+            invalidate();
+          }, 200);
+        } else if (!isMovingRef.current) {
+          u.uSmoothStepSize.value = s.smoothStepSize;
+          u.uSmoothRefineIterations.value = Math.max(1, Math.round(s.smoothRefineIterations));
+        }
       }
     }
   });
@@ -976,13 +1180,23 @@ function VoxelMesh(props: VoxelMeshProps) {
       <boxGeometry
         args={[voxelData.dimensions.x, voxelData.dimensions.y, voxelData.dimensions.z, 1, 1, 1]}
       />
-      <voxelShaderMaterial
-        ref={materialRef}
-        key={VoxelShaderMaterial.key}
-        wireframe={wireframe}
-        side={THREE.DoubleSide}
-        transparent={true}
-      />
+      {smoothMode ? (
+        <smoothVoxelShaderMaterial
+          ref={materialRef}
+          key={SmoothVoxelShaderMaterial.key}
+          wireframe={wireframe}
+          side={THREE.DoubleSide}
+          transparent={true}
+        />
+      ) : (
+        <voxelShaderMaterial
+          ref={materialRef}
+          key={VoxelShaderMaterial.key}
+          wireframe={wireframe}
+          side={THREE.DoubleSide}
+          transparent={true}
+        />
+      )}
     </mesh>
   );
 }

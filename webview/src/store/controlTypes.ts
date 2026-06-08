@@ -57,6 +57,18 @@ export interface ControlState {
   showBoundingBox: boolean;
   showGrid: boolean;
 
+  // ---- Smooth Rendering ----
+  /** スムース表示 (8近傍トライリニア argmax + 境界二分探索) を有効にする */
+  smoothMode: boolean;
+  /** カメラ停止時のレイマーチステップ幅 (ボクセル単位、0.1〜1.0)。小さいほど高品質・高負荷 */
+  smoothStepSize: number;
+  /** カメラ停止時の境界二分探索の反復回数 (1〜8) */
+  smoothRefineIterations: number;
+  /** カメラ操作中のステップ幅 (粗め、 smoothStepSize 以上) */
+  smoothMovingStepSize: number;
+  /** カメラ操作中の境界二分探索の反復回数 (粗め、 smoothRefineIterations 以下) */
+  smoothMovingRefineIterations: number;
+
   // ---- Edge Highlight ----
   enableEdgeHighlight: boolean;
   edgeThickness: number; // 0.01–0.15, step 0.01

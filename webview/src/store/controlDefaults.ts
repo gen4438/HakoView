@@ -189,6 +189,12 @@ export const DEFAULT_CONTROL_STATE: ControlState = {
   showScaleBar: true,
   showBoundingBox: false,
   showGrid: true,
+  // Smooth Rendering
+  smoothMode: false,
+  smoothStepSize: 0.5,
+  smoothRefineIterations: 4,
+  smoothMovingStepSize: 1.0,
+  smoothMovingRefineIterations: 2,
   // Edge Highlight
   enableEdgeHighlight: true,
   edgeThickness: 0.03,

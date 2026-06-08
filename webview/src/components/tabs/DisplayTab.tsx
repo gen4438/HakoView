@@ -23,6 +23,11 @@ export const DisplayTab: React.FC = () => {
   const edgeThickness = useControlStore((s) => s.edgeThickness);
   const edgeIntensity = useControlStore((s) => s.edgeIntensity);
   const edgeMaxDistance = useControlStore((s) => s.edgeMaxDistance);
+  const smoothMode = useControlStore((s) => s.smoothMode);
+  const smoothStepSize = useControlStore((s) => s.smoothStepSize);
+  const smoothRefineIterations = useControlStore((s) => s.smoothRefineIterations);
+  const smoothMovingStepSize = useControlStore((s) => s.smoothMovingStepSize);
+  const smoothMovingRefineIterations = useControlStore((s) => s.smoothMovingRefineIterations);
   const voxelDims = useControlStore((s) => s.voxelDims);
   const set = useControlStore((s) => s.set);
 
@@ -64,6 +69,41 @@ export const DisplayTab: React.FC = () => {
         onChange={(v) => set({ showBoundingBox: v })}
       />
       <ToggleControl label="グリッド" checked={showGrid} onChange={(v) => set({ showGrid: v })} />
+      <Accordion label="スムース表示" defaultOpen={false}>
+        <ToggleControl label="有効" checked={smoothMode} onChange={(v) => set({ smoothMode: v })} />
+        <SliderControl
+          label="ステップ幅 (停止時)"
+          value={smoothStepSize}
+          min={0.1}
+          max={1.0}
+          step={0.05}
+          onChange={(v) => set({ smoothStepSize: v })}
+        />
+        <SliderControl
+          label="境界精度 (停止時)"
+          value={smoothRefineIterations}
+          min={1}
+          max={8}
+          step={1}
+          onChange={(v) => set({ smoothRefineIterations: v })}
+        />
+        <SliderControl
+          label="ステップ幅 (操作中)"
+          value={smoothMovingStepSize}
+          min={0.2}
+          max={2.0}
+          step={0.05}
+          onChange={(v) => set({ smoothMovingStepSize: v })}
+        />
+        <SliderControl
+          label="境界精度 (操作中)"
+          value={smoothMovingRefineIterations}
+          min={0}
+          max={6}
+          step={1}
+          onChange={(v) => set({ smoothMovingRefineIterations: v })}
+        />
+      </Accordion>
       <Accordion label="エッジハイライト" defaultOpen={false}>
         <ToggleControl
           label="有効"
