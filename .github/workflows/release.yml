@@ -21,7 +21,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          # pnpm 11 から install script を持つ依存は明示承認が必要になり
+          # (ERR_PNPM_IGNORED_BUILDS)、 pnpm-workspace.yaml の
+          # onlyBuiltDependencies が CI 環境ではうまく効かなかったため
+          # 当面 v10 に固定する。
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
