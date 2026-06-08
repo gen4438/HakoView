@@ -1,0 +1,10 @@
+# pnpm 11+ では、 `package.json#pnpm` の設定はここに移動した。
+# 参考: https://pnpm.io/settings
+#
+# `packages:` は意図的に空のままにしている。
+# hakoview は root と `webview/` で独立した `pnpm install` を行う構成で、
+# pnpm ワークスペースとしてリンクされたくないため。
+onlyBuiltDependencies:
+  - '@vscode/vsce-sign'
+  - esbuild
+  - keytar
