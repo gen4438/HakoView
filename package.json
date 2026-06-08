@@ -3,7 +3,7 @@
   "publisher": "gen",
   "displayName": "Hako View",
   "description": "A lightweight Voxel model visualizer for VS Code.",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "icon": "images/icon.png",
   "repository": {
     "type": "git",
