@@ -1,8 +1,0 @@
-# pnpm 11+ で `package.json#pnpm` の設定は読まれなくなったため
-# (参考: https://pnpm.io/settings) ここに移行している。
-# 現在 CI では pnpm を v10 にピン留めしているため必須ではないが、 v11 に
-# 上げる時に install script を持つパッケージの明示承認が要るので残しておく。
-onlyBuiltDependencies:
-  - '@vscode/vsce-sign'
-  - esbuild
-  - keytar
